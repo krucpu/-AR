@@ -1,496 +1,719 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>เลือกคำแม่กงให้ถูก!</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>เลือกคำแม่กงให้ถูก!</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #f0fdf4; /* Soft green fallback */
+            touch-action: none; /* Prevent scroll on mobile */
+            user-select: none;
+        }
 
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+        /* Camera Background */
+        #video-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+        
+        #output_canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror effect */
+        }
+        
+        .hidden-video {
+            display: none;
+        }
 
-<style>
-body{font-family:'Kanit',sans-serif;margin:0;overflow:hidden;background:#f0fdf4;touch-action:none;user-select:none;-webkit-user-select:none}
-#video-container{position:fixed;inset:0;width:100vw;height:100vh;z-index:1;background:#111}
-#output_canvas{width:100%;height:100%;transform:scaleX(-1)}
-.hidden-video{display:none}
-#ui-layer{position:fixed;inset:0;width:100vw;height:100vh;z-index:10;pointer-events:none}
-.pointer-events-auto{pointer-events:auto}
+        /* UI Overlay Layer */
+        #ui-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass through if needed, manage via children */
+        }
 
-@keyframes float{0%{transform:translateY(0) rotate(0)}50%{transform:translateY(-15px) rotate(5deg)}100%{transform:translateY(0) rotate(0)}}
-.animate-float{animation:float 4s ease-in-out infinite}
-@keyframes bounce-in{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
-.animate-bounce-in{animation:bounce-in .5s cubic-bezier(.175,.885,.32,1.275) forwards}
-@keyframes pulse-glow{0%{box-shadow:0 0 0 0 rgba(250,204,21,.8)}70%{box-shadow:0 0 0 24px rgba(250,204,21,0)}100%{box-shadow:0 0 0 0 rgba(250,204,21,0)}}
-@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-10px)}50%{transform:translateX(10px)}75%{transform:translateX(-10px)}}
+        .pointer-events-auto {
+            pointer-events: auto;
+        }
 
-.choice-btn{transition:transform .18s ease,background-color .18s ease,border-color .18s ease}
-.choice-btn.hovered{transform:scale(1.12);border-color:#facc15!important;animation:pulse-glow 1s infinite;z-index:20}
-.choice-btn.wrong-shake{animation:shake .5s;background:#fee2e2!important;border-color:#ef4444!important;color:#b91c1c!important}
-.choice-btn.reveal{background:#dcfce7!important;border-color:#22c55e!important;color:#15803d!important}
+        /* Custom Animations */
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(5deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+        .animate-float {
+            animation: float 4s ease-in-out infinite;
+        }
 
-/* วงแหวนบอกความคืบหน้าการจีบนิ้ว */
-.choice-btn .charge{position:absolute;inset:-6px;border-radius:1.75rem;border:6px solid transparent;pointer-events:none}
-.choice-btn.charging .charge{border-color:#22c55e}
+        @keyframes bounce-in {
+            0% { transform: scale(0.5); opacity: 0; }
+            60% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-bounce-in {
+            animation: bounce-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
 
-.pinch-hint{position:absolute;top:-34px;left:50%;transform:translateX(-50%);background:#fff;padding:2px 12px;border-radius:20px;font-size:14px;font-weight:700;color:#db2777;box-shadow:0 4px 6px rgba(0,0,0,.15);opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
-.choice-btn.hovered .pinch-hint{opacity:1}
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(250, 204, 21, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+        }
 
-.confetti{position:fixed;width:14px;height:14px;z-index:60;pointer-events:none}
+        /* Game Buttons */
+        .choice-btn {
+            transition: all 0.2s ease;
+            transform-origin: center;
+        }
+        
+        .choice-btn.hovered {
+            transform: scale(1.15);
+            border-color: #facc15; /* Yellow-400 */
+            animation: pulse-glow 1s infinite;
+            z-index: 20;
+        }
 
-#progress-fill{transition:width .35s ease}
-.screen{position:absolute;inset:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,.78);backdrop-filter:blur(4px);opacity:0;visibility:hidden;transition:opacity .3s ease}
-.screen.active{opacity:1;visibility:visible}
-#game-screen{background:transparent;backdrop-filter:none}
-</style>
+        .choice-btn.wrong-shake {
+            animation: shake 0.5s;
+            background-color: #fee2e2; /* Red-100 */
+            border-color: #ef4444; /* Red-500 */
+            color: #b91c1c;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            50% { transform: translateX(10px); }
+            75% { transform: translateX(-10px); }
+        }
+
+        /* Confetti */
+        .confetti {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background-color: #f00;
+            z-index: 50;
+            opacity: 0;
+        }
+
+        /* Progress Bar transition */
+        #progress-fill {
+            transition: width 0.3s ease;
+        }
+
+        /* Screen overlays */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.75); /* Semi-transparent to see camera */
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+        }
+        .screen.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Game Screen Background - clear to see camera */
+        #game-screen {
+            background: transparent;
+            backdrop-filter: none;
+        }
+
+        /* Cursor / Pinch Hint */
+        #pinch-hint {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #db2777;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .choice-btn.hovered #pinch-hint {
+            opacity: 1;
+        }
+    </style>
 </head>
 <body>
 
-<div id="video-container">
-  <video id="input_video" class="hidden-video" autoplay playsinline muted></video>
-  <canvas id="output_canvas"></canvas>
-</div>
-
-<div id="ui-layer">
-
-  <div class="absolute top-2 left-2 text-4xl animate-float">🌳</div>
-  <div class="absolute top-24 right-4 text-5xl animate-float" style="animation-delay:1s">☀️</div>
-  <div class="absolute bottom-4 left-4 text-6xl animate-float" style="animation-delay:.5s">🐘</div>
-  <div class="absolute bottom-4 right-4 text-5xl animate-float" style="animation-delay:1.5s">🐰</div>
-  <div class="absolute top-1/3 left-2 text-4xl animate-float" style="animation-delay:2s">🦋</div>
-
-  <button id="mute-btn" class="absolute top-4 right-4 bg-white p-3 rounded-full shadow-lg text-2xl z-50 pointer-events-auto">🔊</button>
-
-  <div id="no-hand-warning" class="absolute top-28 left-1/2 -translate-x-1/2 bg-yellow-400 text-white font-bold px-6 py-2 rounded-full shadow-lg opacity-0 transition-opacity duration-300 z-40">
-    👋 ยกมือขึ้นมาในกล้องนะ
-  </div>
-
-  <!-- START -->
-  <div id="start-screen" class="screen active z-40 pointer-events-auto">
-    <div class="bg-white/95 p-8 rounded-3xl shadow-2xl text-center max-w-md w-[90%] border-4 border-pink-300">
-      <h1 class="text-4xl md:text-5xl font-extrabold text-pink-500 mb-4">🐘 เลือกคำ<br>แม่กงให้ถูก!</h1>
-      <p class="text-lg text-gray-700 mb-6 font-semibold">
-        ใช้ <span class="text-pink-500 font-bold">นิ้วโป้ง</span> แตะ <span class="text-pink-500 font-bold">นิ้วชี้</span> (จีบนิ้ว)<br>ค้างไว้แป๊บนึงเพื่อเลือกคำตอบ! 🤏
-      </p>
-      <div class="flex justify-center gap-4 mb-8 text-4xl"><span>✋</span><span>➡️</span><span>🤏</span></div>
-      <button id="start-btn" class="bg-gradient-to-r from-pink-400 to-purple-500 text-white font-bold text-2xl py-4 px-10 rounded-full shadow-[0_8px_0_#9d174d] active:translate-y-1 transition-all w-full">
-        เริ่มเกมเลย! 🎮
-      </button>
-      <p id="cam-status" class="mt-4 text-sm text-gray-500 h-5"></p>
-    </div>
-  </div>
-
-  <!-- GAME -->
-  <div id="game-screen" class="screen z-30">
-    <div class="absolute top-4 left-1/2 -translate-x-1/2 w-[88%] max-w-2xl bg-white/90 rounded-2xl p-3 shadow-lg border-2 border-blue-200 flex flex-col gap-2">
-      <div class="flex justify-between items-center w-full px-2">
-        <span class="text-lg md:text-2xl font-bold text-blue-600">🐘 แม่กง</span>
-        <span id="progress-text" class="text-lg md:text-2xl font-extrabold text-orange-500">⭐ ข้อ 1 / 10</span>
-      </div>
-      <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-        <div id="progress-fill" class="bg-gradient-to-r from-yellow-400 to-orange-500 h-full w-0"></div>
-      </div>
+    <!-- Camera Layer -->
+    <div id="video-container">
+        <video id="input_video" class="hidden-video" autoplay playsinline></video>
+        <canvas id="output_canvas"></canvas>
     </div>
 
-    <div class="flex flex-col items-center mt-24 pointer-events-none">
-      <div id="question-image" class="text-[110px] md:text-[150px] leading-none bg-white/75 rounded-full p-4 border-4 border-white shadow-xl"></div>
-      <div class="mt-4 bg-white/90 px-8 py-2 rounded-full shadow-lg border-2 border-green-300">
-        <h2 class="text-xl md:text-3xl font-bold text-green-700">ภาพนี้คือคำใด?</h2>
-      </div>
-    </div>
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer">
+        
+        <!-- Decoration Elements (Static) -->
+        <div class="absolute top-2 left-2 text-4xl animate-float" style="animation-delay: 0s;">🌳</div>
+        <div class="absolute top-4 right-4 text-5xl animate-float" style="animation-delay: 1s;">☀️</div>
+        <div class="absolute bottom-4 left-4 text-6xl animate-float" style="animation-delay: 0.5s;">🐘</div>
+        <div class="absolute bottom-4 right-4 text-5xl animate-float" style="animation-delay: 1.5s;">🐰</div>
+        <div class="absolute top-1/3 left-2 text-4xl animate-float" style="animation-delay: 2s;">🦋</div>
+        <div class="absolute top-1/2 right-2 text-4xl animate-float" style="animation-delay: 0.8s;">🐿️</div>
 
-    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 w-[95%] max-w-4xl flex justify-center gap-4 md:gap-10">
-      <button id="btn-left" class="choice-btn pointer-events-auto relative bg-white border-8 border-pink-400 text-pink-600 font-extrabold text-3xl md:text-5xl py-6 md:py-8 rounded-3xl shadow-xl w-1/2 max-w-[300px] flex justify-center items-center">
-        <span id="text-left">ตัวเลือก</span>
-        <div class="charge"></div><div class="pinch-hint">🤏 จีบนิ้วค้างไว้</div>
-      </button>
-      <button id="btn-right" class="choice-btn pointer-events-auto relative bg-white border-8 border-blue-400 text-blue-600 font-extrabold text-3xl md:text-5xl py-6 md:py-8 rounded-3xl shadow-xl w-1/2 max-w-[300px] flex justify-center items-center">
-        <span id="text-right">ตัวเลือก</span>
-        <div class="charge"></div><div class="pinch-hint">🤏 จีบนิ้วค้างไว้</div>
-      </button>
-    </div>
-  </div>
+        <!-- Mute Button -->
+        <button id="mute-btn" class="absolute top-4 right-20 bg-white p-3 rounded-full shadow-lg text-2xl z-50 pointer-events-auto hover:bg-gray-100 transition-colors">
+            🔊
+        </button>
 
-  <!-- FEEDBACK -->
-  <div id="feedback-overlay" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none opacity-0 transition-opacity duration-300">
-    <div id="feedback-box" class="bg-white px-10 py-6 rounded-3xl shadow-2xl border-8 scale-50 transition-transform duration-300 text-center">
-      <div id="feedback-emoji" class="text-6xl mb-2">🎉</div>
-      <h2 id="feedback-text" class="text-3xl md:text-4xl font-extrabold">เก่งมาก!</h2>
-      <p id="feedback-sub" class="text-lg font-semibold mt-1 opacity-80"></p>
-    </div>
-  </div>
+        <!-- No Hand Warning -->
+        <div id="no-hand-warning" class="absolute top-20 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-white font-bold px-6 py-2 rounded-full shadow-lg opacity-0 transition-opacity duration-300 z-50">
+            👋 ยกมือขึ้นมาในกล้องนะ
+        </div>
 
-  <!-- END -->
-  <div id="end-screen" class="screen z-40 pointer-events-auto">
-    <div class="bg-white/95 p-10 rounded-3xl shadow-2xl text-center max-w-lg w-[90%] border-8 border-yellow-400 relative">
-      <div class="absolute -top-16 left-1/2 -translate-x-1/2 text-8xl">🏆</div>
-      <h1 id="end-title" class="text-4xl md:text-5xl font-extrabold text-yellow-500 mt-8 mb-3">เยี่ยมมาก!</h1>
-      <p id="end-sub" class="text-xl text-gray-700 mb-3 font-bold">หนูเล่นครบทุกข้อแล้ว!</p>
-      <div id="end-score" class="text-4xl font-black text-green-500 mb-6 bg-green-100 rounded-full py-2 px-6 inline-block">0 / 10 ข้อ</div>
-      <div class="flex justify-center gap-4 text-4xl mb-6"><span>🐘</span><span>🐰</span><span>🦊</span><span>🐿️</span></div>
-      <button id="restart-btn" class="bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold text-2xl md:text-3xl py-4 px-10 rounded-full shadow-[0_8px_0_#047857] active:translate-y-1 transition-all w-full">🔄 เล่นอีกครั้ง</button>
+        <!-- START SCREEN -->
+        <div id="start-screen" class="screen active z-40 pointer-events-auto">
+            <div class="bg-white/90 p-8 rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] text-center max-w-md w-[90%] border-4 border-pink-300">
+                <h1 class="text-4xl md:text-5xl font-extrabold text-pink-500 mb-4 tracking-wide drop-shadow-md">
+                    🐘 เลือกคำ<br>แม่กงให้ถูก!
+                </h1>
+                <p class="text-xl text-gray-700 mb-6 font-semibold">
+                    ใช้ <span class="text-pink-500 font-bold">นิ้วโป้ง</span> แตะ <span class="text-pink-500 font-bold">นิ้วชี้</span> (จีบนิ้ว) <br>เพื่อเลือกคำตอบนะ! 🤏
+                </p>
+                <div class="flex justify-center gap-4 mb-8 text-4xl">
+                    <span>✋</span><span>➡️</span><span>🤏</span>
+                </div>
+                <button id="start-btn" class="bg-gradient-to-r from-pink-400 to-purple-500 text-white font-bold text-2xl py-4 px-10 rounded-full shadow-[0_8px_0_#9d174d] hover:translate-y-1 hover:shadow-[0_4px_0_#9d174d] transition-all w-full">
+                    เริ่มเกมเลย! 🎮
+                </button>
+            </div>
+        </div>
+
+        <!-- GAME SCREEN -->
+        <div id="game-screen" class="screen z-30">
+            
+            <!-- Header & Progress -->
+            <div class="absolute top-4 left-1/2 transform -translate-x-1/2 w-[90%] max-w-2xl bg-white/90 rounded-2xl p-3 shadow-lg border-2 border-blue-200 flex flex-col items-center gap-2">
+                <div class="flex justify-between items-center w-full px-4">
+                    <span class="text-xl md:text-2xl font-bold text-blue-600">🐘 เลือกคำแม่กง</span>
+                    <span id="progress-text" class="text-xl md:text-2xl font-extrabold text-orange-500">⭐ ข้อ 1 / 10</span>
+                </div>
+                <!-- Progress Bar -->
+                <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div id="progress-fill" class="bg-gradient-to-r from-yellow-400 to-orange-500 h-full rounded-full w-0"></div>
+                </div>
+            </div>
+
+            <!-- Hint Image & Question -->
+            <div class="flex flex-col items-center mt-20 mb-8 pointer-events-none">
+                <div id="question-image" class="text-[120px] md:text-[150px] leading-none drop-shadow-2xl animate-bounce-in bg-white/70 rounded-full p-4 border-4 border-white shadow-xl">
+                    <!-- Image/Emoji goes here -->
+                </div>
+                <div class="mt-4 bg-white/90 px-8 py-3 rounded-full shadow-lg border-2 border-green-300">
+                    <h2 class="text-2xl md:text-3xl font-bold text-green-700">ภาพนี้คือคำใด?</h2>
+                </div>
+            </div>
+
+            <!-- Choices Container -->
+            <div class="absolute bottom-10 left-1/2 transform -translate-x-1/2 w-[95%] max-w-4xl flex flex-row justify-center gap-4 md:gap-10">
+                
+                <!-- Button Left -->
+                <button id="btn-left" class="choice-btn pointer-events-auto relative bg-white border-8 border-pink-400 text-pink-600 font-extrabold text-3xl md:text-5xl py-6 md:py-8 rounded-3xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] w-1/2 max-w-[300px] flex justify-center items-center">
+                    <span id="text-left">ตัวเลือก</span>
+                    <div id="pinch-hint">🤏 จีบนิ้วเพื่อเลือก</div>
+                </button>
+
+                <!-- Button Right -->
+                <button id="btn-right" class="choice-btn pointer-events-auto relative bg-white border-8 border-blue-400 text-blue-600 font-extrabold text-3xl md:text-5xl py-6 md:py-8 rounded-3xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] w-1/2 max-w-[300px] flex justify-center items-center">
+                    <span id="text-right">ตัวเลือก</span>
+                    <div id="pinch-hint">🤏 จีบนิ้วเพื่อเลือก</div>
+                </button>
+
+            </div>
+        </div>
+
+        <!-- FEEDBACK OVERLAYS (Correct / Incorrect) -->
+        <div id="feedback-overlay" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none opacity-0 transition-opacity duration-300 flex flex-col items-center">
+            <div id="feedback-box" class="bg-white px-10 py-6 rounded-3xl shadow-2xl border-4 transform scale-50 transition-transform duration-300 text-center">
+                <div id="feedback-emoji" class="text-6xl mb-2">🎉</div>
+                <h2 id="feedback-text" class="text-4xl font-extrabold">เก่งมาก!</h2>
+            </div>
+        </div>
+
+        <!-- END SCREEN -->
+        <div id="end-screen" class="screen z-40 pointer-events-auto">
+            <div class="bg-white/95 p-10 rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.2)] text-center max-w-lg w-[90%] border-8 border-yellow-400 relative">
+                <div class="absolute -top-16 left-1/2 transform -translate-x-1/2 text-8xl">🏆</div>
+                <h1 class="text-5xl font-extrabold text-yellow-500 mt-8 mb-4 drop-shadow-md">เยี่ยมมาก!</h1>
+                <p class="text-2xl text-gray-700 mb-2 font-bold">หนูเลือกคำแม่กงครบแล้ว!</p>
+                <div class="text-4xl font-black text-green-500 mb-8 bg-green-100 rounded-full py-2 px-6 inline-block">
+                    10 / 10 ข้อ
+                </div>
+                <div class="flex justify-center gap-4 text-4xl mb-8">
+                    <span>🐘</span><span>🐰</span><span>🦊</span><span>🐿️</span>
+                </div>
+                <button id="restart-btn" class="bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold text-3xl py-4 px-10 rounded-full shadow-[0_8px_0_#047857] hover:translate-y-1 hover:shadow-[0_4px_0_#047857] transition-all w-full flex items-center justify-center gap-3">
+                    <span>🔄</span> เล่นอีกครั้ง
+                </button>
+            </div>
+        </div>
+
     </div>
-  </div>
-</div>
 
 <script>
-/* ---------- 1. ข้อมูล: คำตอบถูก = แม่กง / ตัวลวง = มาตราอื่น ---------- */
-const allQuestions = [
-  { image:'🦟', correct:'ยุง',     wrong:'ยุน'      },
-  { image:'🐒', correct:'ลิง',     wrong:'ลิน'      },
-  { image:'🎈', correct:'ลูกโป่ง', wrong:'ลูกโป่น'  },
-  { image:'🐘', correct:'ช้าง',    wrong:'ช้าน'     },
-  { image:'🐝', correct:'ผึ้ง',    wrong:'ผึ้น'     },
-  { image:'🦐', correct:'กุ้ง',    wrong:'กุ้น'     },
-  { image:'👖', correct:'กางเกง',  wrong:'กางเกน'   },
-  { image:'🔔', correct:'ระฆัง',   wrong:'ระฆัน'    },
-  { image:'🎵', correct:'เพลง',    wrong:'เพลน'     },
-  { image:'🥭', correct:'มะม่วง',  wrong:'มะม่วน'   }
-];
-const TOTAL = allQuestions.length;
-const MAX_TRIES = 2;          // ผิดครบ 2 ครั้ง → เฉลยแล้วไปต่อ
-const PINCH_HOLD_MS = 450;    // ต้องจีบค้างกี่ ms ถึงนับเป็นคลิก
+    // --- 1. Game Data & State ---
+    const allQuestions = [
+        { image: '🦟', correct: 'ยุง', wrong: 'ยุ่ง' },
+        { image: '🐒', correct: 'ลิง', wrong: 'ลิ่ง' },
+        { image: '🪣', correct: 'ถัง', wrong: 'ถั้ง' },
+        { image: '🐘', correct: 'ช้าง', wrong: 'ช่าง' },
+        { image: '🐝', correct: 'ผึ้ง', wrong: 'ผึ่ง' },
+        { image: '🦐', correct: 'กุ้ง', wrong: 'กุ่ง' },
+        { image: '🦍', correct: 'คิงคอง', wrong: 'คิงค่อง' },
+        { image: '🍇', correct: 'ลองกอง', wrong: 'ลองก้อง' },
+        { image: '👖', correct: 'กางเกง', wrong: 'ก้างเกง' },
+        { image: '🍢', correct: 'ปิ้ง', wrong: 'ปิ่ง' }
+    ];
 
-let order = [], sides = [], qIndex = 0, score = 0, tries = 0;
-let currentOptions = [], isPlaying = false, isMuted = false, isTransitioning = false;
+    let currentQuestionIndex = 0;
+    let currentOptions = []; // Array of {text, isCorrect}
+    let isPlaying = false;
+    let isMuted = false;
+    let isTransitioning = false; // Prevents multiple inputs during animations
+    let questionSides = []; // Array storing whether correct answer is 'left' or 'right' for each of the 10 questions
 
-/* Hand state */
-let hoveredButtonId = null, pinchStartTime = 0, pinchCooldown = false, lastHandTime = Date.now();
+    // Hand Tracking State
+    let hoveredButtonId = null;
+    let wasPinching = false;
+    let pinchCooldown = false;
+    let lastHandDetectTime = Date.now();
 
-/* DOM */
-const $ = id => document.getElementById(id);
-const startScreen=$('start-screen'), gameScreen=$('game-screen'), endScreen=$('end-screen');
-const questionImage=$('question-image'), btnLeft=$('btn-left'), btnRight=$('btn-right');
-const textLeft=$('text-left'), textRight=$('text-right');
-const progressText=$('progress-text'), progressFill=$('progress-fill');
-const feedbackOverlay=$('feedback-overlay'), feedbackBox=$('feedback-box');
-const feedbackEmoji=$('feedback-emoji'), feedbackText=$('feedback-text'), feedbackSub=$('feedback-sub');
-const noHandWarning=$('no-hand-warning'), muteBtn=$('mute-btn'), camStatus=$('cam-status');
-const videoElement=$('input_video'), canvasElement=$('output_canvas');
-const ctx = canvasElement.getContext('2d');
+    // DOM Elements
+    const startScreen = document.getElementById('start-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const endScreen = document.getElementById('end-screen');
+    const questionImage = document.getElementById('question-image');
+    const btnLeft = document.getElementById('btn-left');
+    const btnRight = document.getElementById('btn-right');
+    const textLeft = document.getElementById('text-left');
+    const textRight = document.getElementById('text-right');
+    const progressText = document.getElementById('progress-text');
+    const progressFill = document.getElementById('progress-fill');
+    const feedbackOverlay = document.getElementById('feedback-overlay');
+    const feedbackBox = document.getElementById('feedback-box');
+    const feedbackEmoji = document.getElementById('feedback-emoji');
+    const feedbackText = document.getElementById('feedback-text');
+    const noHandWarning = document.getElementById('no-hand-warning');
+    const muteBtn = document.getElementById('mute-btn');
 
-const BTN_BASE_L = "choice-btn pointer-events-auto relative bg-white border-8 border-pink-400 text-pink-600 font-extrabold text-3xl md:text-5xl py-6 md:py-8 rounded-3xl shadow-xl w-1/2 max-w-[300px] flex justify-center items-center";
-const BTN_BASE_R = BTN_BASE_L.replace(/pink/g,'blue');
+    // Camera/Canvas Elements
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
 
-/* ---------- 2. สุ่มฝั่งคำตอบแบบสมดุล (ไม่ซ้ำเกิน 2 ครั้งติด) ---------- */
-function generateBalancedSides(n){
-  const half = n/2;
-  for(let attempt=0; attempt<500; attempt++){
-    const arr=[]; let l=0,r=0,run=1;
-    for(let i=0;i<n;i++){
-      let c = l>=half ? 'right' : r>=half ? 'left' : (Math.random()<.5?'left':'right');
-      if(i>0){ run = arr[i-1]===c ? run+1 : 1; if(run>2){ c = c==='left'?'right':'left'; run=1; } }
-      c==='left'?l++:r++; arr.push(c);
-    }
-    if(l===half && r===half) return arr;
-  }
-  return Array.from({length:n},(_,i)=> i%2?'right':'left');
-}
-const shuffle = a => a.map(v=>[Math.random(),v]).sort((x,y)=>x[0]-y[0]).map(p=>p[1]);
+    // Generates an array of 10 sides ('left' or 'right') such that no side appears more than twice consecutively,
+    // and maintaining roughly a 5:5 split.
+    function generateBalancedSides() {
+        let valid = false;
+        let sides = [];
+        while (!valid) {
+            sides = [];
+            // We want 5 lefts and 5 rights roughly
+            let leftCount = 0;
+            let rightCount = 0;
+            
+            for (let i = 0; i < 10; i++) {
+                let choice;
+                if (leftCount >= 5) choice = 'right';
+                else if (rightCount >= 5) choice = 'left';
+                else choice = Math.random() < 0.5 ? 'left' : 'right';
 
-/* ---------- 3. เสียง ---------- */
-let thaiVoiceReady = false;
-function refreshVoices(){
-  const v = window.speechSynthesis?.getVoices?.() || [];
-  thaiVoiceReady = v.some(x => x.lang && x.lang.toLowerCase().startsWith('th'));
-}
-if('speechSynthesis' in window){ refreshVoices(); speechSynthesis.onvoiceschanged = refreshVoices; }
+                if (choice === 'left') leftCount++;
+                else rightCount++;
+                sides.push(choice);
+            }
 
-function beep(freq=880, dur=.15){
-  try{
-    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
-    window._ac = window._ac || new AC();
-    const o = _ac.createOscillator(), g = _ac.createGain();
-    o.frequency.value = freq; o.type='sine'; o.connect(g); g.connect(_ac.destination);
-    g.gain.setValueAtTime(.18,_ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(.001,_ac.currentTime+dur);
-    o.start(); o.stop(_ac.currentTime+dur);
-  }catch(e){}
-}
-function speak(text, fallbackFreq){
-  if(isMuted) return;
-  if(thaiVoiceReady){
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang='th-TH'; u.rate=1; u.pitch=1.2;
-    speechSynthesis.speak(u);
-  } else if(fallbackFreq){ beep(fallbackFreq); }
-}
-muteBtn.addEventListener('click', ()=>{
-  isMuted = !isMuted;
-  muteBtn.textContent = isMuted ? '🔇' : '🔊';
-  if(isMuted && 'speechSynthesis' in window) speechSynthesis.cancel();
-});
+            // Check if any side appears > 2 times consecutively
+            let maxConsecutive = 1;
+            let currentConsecutive = 1;
+            for (let i = 1; i < sides.length; i++) {
+                if (sides[i] === sides[i - 1]) {
+                    currentConsecutive++;
+                    if (currentConsecutive > maxConsecutive) {
+                        maxConsecutive = currentConsecutive;
+                    }
+                } else {
+                    currentConsecutive = 1;
+                }
+            }
 
-/* ---------- 4. ลอจิกเกม ---------- */
-function startGame(){
-  qIndex=0; score=0; tries=0; isPlaying=true; isTransitioning=false;
-  order = shuffle([...Array(TOTAL).keys()]);
-  sides = generateBalancedSides(TOTAL);
-  startScreen.classList.remove('active');
-  endScreen.classList.remove('active');
-  gameScreen.classList.add('active');
-  speak('พร้อมแล้ว ไปกันเลย', 660);
-  loadQuestion();
-}
-
-function loadQuestion(){
-  if(qIndex >= TOTAL){ endGame(); return; }
-  tries = 0;
-  const q = allQuestions[order[qIndex]];
-  questionImage.textContent = q.image;
-  progressText.textContent = `⭐ ข้อ ${qIndex+1} / ${TOTAL}`;
-  progressFill.style.width = `${(qIndex/TOTAL)*100}%`;
-
-  currentOptions = sides[qIndex]==='left'
-    ? [{text:q.correct,isCorrect:true},{text:q.wrong,isCorrect:false}]
-    : [{text:q.wrong,isCorrect:false},{text:q.correct,isCorrect:true}];
-
-  textLeft.textContent = currentOptions[0].text;
-  textRight.textContent = currentOptions[1].text;
-  btnLeft.className = BTN_BASE_L;
-  btnRight.className = BTN_BASE_R;
-
-  questionImage.classList.remove('animate-bounce-in');
-  void questionImage.offsetWidth;
-  questionImage.classList.add('animate-bounce-in');
-}
-
-function handleAnswer(btnId){
-  if(!isPlaying || isTransitioning) return;
-  isTransitioning = true;
-  clearHovers();
-
-  const isLeft = btnId === 'btn-left';
-  const picked = isLeft ? currentOptions[0] : currentOptions[1];
-  const targetBtn = isLeft ? btnLeft : btnRight;
-
-  if(picked.isCorrect){
-    if(tries === 0) score++;
-    speak('เก่งมาก ถูกต้องแล้ว', 990);
-    showFeedback(true, tries===0 ? '' : 'ครั้งนี้ถูกแล้ว!');
-    targetBtn.classList.add('reveal');
-    confetti(30);
-    setTimeout(()=>{ hideFeedback(); qIndex++; isTransitioning=false; loadQuestion(); }, 1500);
-    return;
-  }
-
-  tries++;
-  targetBtn.classList.add('wrong-shake');
-
-  if(tries >= MAX_TRIES){
-    const correctIsLeft = currentOptions[0].isCorrect;
-    const correctBtn = correctIsLeft ? btnLeft : btnRight;
-    const correctWord = currentOptions[correctIsLeft?0:1].text;
-    speak(`คำที่ถูกคือ ${correctWord} สะกดด้วย งอ งู`, 440);
-    showFeedback(false, `คำที่ถูกคือ "${correctWord}" 🐍 สะกดด้วย ง`);
-    setTimeout(()=>{
-      targetBtn.classList.remove('wrong-shake');
-      correctBtn.classList.add('reveal');
-    }, 500);
-    setTimeout(()=>{ hideFeedback(); qIndex++; isTransitioning=false; loadQuestion(); }, 2600);
-  } else {
-    speak('ไม่เป็นไร ลองใหม่อีกครั้งนะ', 330);
-    showFeedback(false, 'ลองอีกทีนะ');
-    setTimeout(()=>{
-      targetBtn.classList.remove('wrong-shake');
-      hideFeedback(); isTransitioning=false;
-    }, 1400);
-  }
-}
-
-function showFeedback(ok, sub=''){
-  feedbackOverlay.classList.remove('opacity-0');
-  feedbackBox.classList.remove('scale-50'); feedbackBox.classList.add('scale-100');
-  feedbackBox.className = `px-10 py-6 rounded-3xl shadow-2xl border-8 scale-100 transition-transform duration-300 text-center ${ok?'bg-green-50 border-green-400 text-green-600':'bg-orange-50 border-orange-400 text-orange-600'}`;
-  feedbackEmoji.textContent = ok ? '🎉' : '😊';
-  feedbackText.textContent  = ok ? 'เก่งมาก!' : 'ลองใหม่นะ';
-  feedbackSub.textContent   = sub;
-}
-function hideFeedback(){
-  feedbackOverlay.classList.add('opacity-0');
-  feedbackBox.classList.remove('scale-100'); feedbackBox.classList.add('scale-50');
-}
-
-function endGame(){
-  isPlaying = false;
-  gameScreen.classList.remove('active');
-  endScreen.classList.add('active');
-  progressFill.style.width = '100%';
-  $('end-score').textContent = `${score} / ${TOTAL} ข้อ`;
-  const perfect = score === TOTAL;
-  $('end-title').textContent = perfect ? 'สุดยอดไปเลย!' : score >= TOTAL*0.7 ? 'เยี่ยมมาก!' : 'เก่งมากนะ!';
-  $('end-sub').textContent = perfect ? 'ตอบถูกหมดทุกข้อเลย! 🌟' : 'ลองเล่นอีกครั้งจะเก่งขึ้นอีกนะ';
-  speak(`หนูตอบถูก ${score} ข้อ จาก ${TOTAL} ข้อ`, 880);
-  confetti(perfect ? 120 : 60);
-}
-
-$('start-btn').addEventListener('click', bootCameraThenStart);
-$('restart-btn').addEventListener('click', startGame);
-btnLeft.addEventListener('click', ()=>handleAnswer('btn-left'));
-btnRight.addEventListener('click', ()=>handleAnswer('btn-right'));
-
-function confetti(amount=30){
-  const colors=['#facc15','#f472b6','#60a5fa','#34d399','#a78bfa'];
-  for(let i=0;i<amount;i++){
-    const c=document.createElement('div');
-    c.className='confetti';
-    c.style.left=Math.random()*100+'vw'; c.style.top='-20px';
-    c.style.backgroundColor=colors[(Math.random()*colors.length)|0];
-    c.style.borderRadius=Math.random()>.5?'50%':'2px';
-    const dur=Math.random()*2+2, delay=Math.random()*.4;
-    c.animate(
-      [{transform:'translate3d(0,0,0) rotate(0)',opacity:1},
-       {transform:`translate3d(${(Math.random()-.5)*220}px,100vh,0) rotate(${Math.random()*720}deg)`,opacity:0}],
-      {duration:dur*1000, delay:delay*1000, easing:'cubic-bezier(.37,0,.63,1)', fill:'forwards'}
-    );
-    document.body.appendChild(c);
-    setTimeout(()=>c.remove(),(dur+delay)*1000);
-  }
-}
-
-/* ---------- 5. กล้อง + MediaPipe ---------- */
-let camW=0, camH=0, drawX=0, drawY=0, drawW=0, drawH=0;
-
-function resizeCanvas(){
-  const dpr = Math.min(window.devicePixelRatio||1, 2);
-  canvasElement.width  = window.innerWidth  * dpr;
-  canvasElement.height = window.innerHeight * dpr;
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-}
-window.addEventListener('resize', resizeCanvas);
-window.addEventListener('orientationchange', ()=>setTimeout(resizeCanvas,300));
-resizeCanvas();
-
-/* วาดแบบ cover พร้อมเก็บค่าไว้แปลงพิกัด → ภาพไม่ยืด */
-function drawCover(img){
-  const cw = window.innerWidth, ch = window.innerHeight;
-  camW = img.width || img.videoWidth; camH = img.height || img.videoHeight;
-  if(!camW || !camH) return;
-  const s = Math.max(cw/camW, ch/camH);
-  drawW = camW*s; drawH = camH*s;
-  drawX = (cw-drawW)/2; drawY = (ch-drawH)/2;
-  ctx.drawImage(img, drawX, drawY, drawW, drawH);
-}
-/* landmark (0-1) → พิกัด DOM (ชดเชยการมิเรอร์ด้วย CSS) */
-const toScreen = lm => ({
-  x: window.innerWidth - (drawX + lm.x*drawW),
-  y: drawY + lm.y*drawH
-});
-
-function onResults(results){
-  const cw = window.innerWidth, ch = window.innerHeight;
-  ctx.save();
-  ctx.clearRect(0,0,cw,ch);
-  drawCover(results.image);
-
-  const hands_ = results.multiHandLandmarks;
-  if(hands_ && hands_.length){
-    lastHandTime = Date.now();
-    noHandWarning.classList.add('opacity-0');
-
-    // วาดโครงมือทุกมือ แต่ "ควบคุมด้วยมือเดียว" (มือแรก) เท่านั้น
-    hands_.forEach((lm, i) => {
-      const pts = lm.map(p => ({ x: drawX + p.x*drawW, y: drawY + p.y*drawH, z:p.z }));
-      drawConnectors(ctx, pts, HAND_CONNECTIONS, {color: i===0?'#ffffff':'#ffffff66', lineWidth:4});
-      drawLandmarks(ctx, pts, {color: i===0?'#ec4899':'#ec489966', lineWidth:1, radius:4});
-    });
-
-    if(isPlaying && !isTransitioning){
-      const lm = hands_[0];
-      const idx = lm[8], thumb = lm[4];
-      const p = toScreen(idx);
-
-      // เคอร์เซอร์ปลายนิ้ว (วาดในระบบพิกัด canvas จึงต้อง mirror กลับ)
-      ctx.beginPath();
-      ctx.arc(cw - p.x, p.y, 14, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(236,72,153,.85)'; ctx.fill();
-      ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
-
-      checkHover(p.x, p.y);
-
-      // pinch แบบ normalize ด้วยขนาดมือ → แม่นทุกระยะห่างจากกล้อง
-      const handSize = Math.hypot(lm[0].x-lm[9].x, lm[0].y-lm[9].y) || 0.001;
-      const ratio = Math.hypot(thumb.x-idx.x, thumb.y-idx.y) / handSize;
-      const isPinching = ratio < 0.38;
-
-      if(isPinching && hoveredButtonId && !pinchCooldown){
-        if(!pinchStartTime) pinchStartTime = Date.now();
-        const held = Date.now() - pinchStartTime;
-        document.getElementById(hoveredButtonId).classList.add('charging');
-        if(held >= PINCH_HOLD_MS){
-          const target = hoveredButtonId;
-          pinchStartTime = 0; pinchCooldown = true;
-          setTimeout(()=>{ pinchCooldown = false; }, 1200);
-          handleAnswer(target);
+            if (maxConsecutive <= 2 && leftCount === 5 && rightCount === 5) {
+                valid = true;
+            }
         }
-      } else {
-        pinchStartTime = 0;
-        btnLeft.classList.remove('charging');
-        btnRight.classList.remove('charging');
-      }
+        return sides;
     }
-  } else {
-    if(isPlaying && Date.now()-lastHandTime > 2000) noHandWarning.classList.remove('opacity-0');
-    clearHovers(); pinchStartTime = 0;
-  }
-  ctx.restore();
-}
 
-function checkHover(x,y){
-  const pad = 24;
-  const inside = (r) => x > r.left-pad && x < r.right+pad && y > r.top-pad && y < r.bottom+pad;
-  let next = null;
-  if(inside(btnLeft.getBoundingClientRect())) next='btn-left';
-  else if(inside(btnRight.getBoundingClientRect())) next='btn-right';
+    // --- 2. Audio System ---
+    function speak(text) {
+        if (isMuted) return;
+        window.speechSynthesis.cancel(); // Stop current speech
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'th-TH';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.2; // Slightly higher pitch for kids game
+        window.speechSynthesis.speak(utterance);
+    }
 
-  if(hoveredButtonId !== next){
-    clearHovers();
-    hoveredButtonId = next;
-    if(next) document.getElementById(next).classList.add('hovered');
-  }
-}
-function clearHovers(){
-  btnLeft.classList.remove('hovered','charging');
-  btnRight.classList.remove('hovered','charging');
-  hoveredButtonId = null; pinchStartTime = 0;
-}
-
-/* เปิดกล้องหลังกดปุ่ม (จำเป็นสำหรับ iOS/Safari) */
-let camStarted = false;
-async function bootCameraThenStart(){
-  if(camStarted){ startGame(); return; }
-  camStatus.textContent = 'กำลังเปิดกล้อง...';
-  try{
-    if(window._ac?.state === 'suspended') window._ac.resume();
-    const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-    hands.setOptions({
-      maxNumHands: 1,          // ควบคุมมือเดียว = เสถียร + เบากว่า
-      modelComplexity: 0,      // เบาสำหรับแท็บเล็ต
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.6
+    muteBtn.addEventListener('click', () => {
+        isMuted = !isMuted;
+        muteBtn.textContent = isMuted ? '🔇' : '🔊';
+        if (isMuted) window.speechSynthesis.cancel();
     });
+
+    // --- 3. Game Logic Functions ---
+    function startGame() {
+        currentQuestionIndex = 0;
+        isPlaying = true;
+        isTransitioning = false;
+        
+        // Generate a fresh balanced sequence of correct answer positions for this gameplay session
+        questionSides = generateBalancedSides();
+        
+        startScreen.classList.remove('active');
+        endScreen.classList.remove('active');
+        gameScreen.classList.add('active');
+        
+        speak("พร้อมแล้ว ไปกันเลย!");
+        loadQuestion(currentQuestionIndex);
+    }
+
+    function loadQuestion(index) {
+        if (index >= allQuestions.length) {
+            endGame();
+            return;
+        }
+
+        const q = allQuestions[index];
+        questionImage.textContent = q.image;
+        
+        // Update Progress
+        progressText.textContent = `⭐ ข้อ ${index + 1} / 10`;
+        progressFill.style.width = `${((index) / 10) * 100}%`;
+
+        // Determine correct answer side based on balanced randomization array
+        const correctSide = questionSides[index]; // 'left' or 'right'
+
+        let options = [];
+        if (correctSide === 'left') {
+            options = [
+                { text: q.correct, isCorrect: true },
+                { text: q.wrong, isCorrect: false }
+            ];
+        } else {
+            options = [
+                { text: q.wrong, isCorrect: false },
+                { text: q.correct, isCorrect: true }
+            ];
+        }
+        
+        currentOptions = options;
+
+        // Assign to buttons
+        textLeft.textContent = options[0].text;
+        textRight.textContent = options[1].text;
+
+        // Reset button styles
+        btnLeft.className = "choice-btn pointer-events-auto relative bg-white border-8 border-pink-400 text-pink-600 font-extrabold text-3xl md:text-5xl py-6 md:py-8 rounded-3xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] w-1/2 max-w-[300px] flex justify-center items-center";
+        btnRight.className = "choice-btn pointer-events-auto relative bg-white border-8 border-blue-400 text-blue-600 font-extrabold text-3xl md:text-5xl py-6 md:py-8 rounded-3xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] w-1/2 max-w-[300px] flex justify-center items-center";
+        
+        // Re-trigger bounce animation
+        questionImage.classList.remove('animate-bounce-in');
+        void questionImage.offsetWidth; // trigger reflow
+        questionImage.classList.add('animate-bounce-in');
+    }
+
+    function handleAnswer(btnId) {
+        if (!isPlaying || isTransitioning) return;
+        isTransitioning = true;
+
+        const isLeft = btnId === 'btn-left';
+        const selectedOption = isLeft ? currentOptions[0] : currentOptions[1];
+        const targetBtn = isLeft ? btnLeft : btnRight;
+
+        if (selectedOption.isCorrect) {
+            // Correct Answer
+            speak("เก่งมาก! ถูกต้องแล้ว!");
+            showFeedback(true);
+            createConfetti();
+            
+            // Highlight correct button
+            targetBtn.classList.add('bg-green-100', 'border-green-500', 'text-green-600');
+            
+            setTimeout(() => {
+                currentQuestionIndex++;
+                hideFeedback();
+                isTransitioning = false;
+                loadQuestion(currentQuestionIndex);
+            }, 1500); // Wait 1.5s then go next
+            
+        } else {
+            // Wrong Answer
+            speak("ไม่เป็นไร ลองใหม่อีกครั้งนะ");
+            showFeedback(false);
+            
+            targetBtn.classList.add('wrong-shake');
+            
+            setTimeout(() => {
+                targetBtn.classList.remove('wrong-shake');
+                hideFeedback();
+                isTransitioning = false;
+            }, 1500);
+        }
+    }
+
+    function showFeedback(isCorrect) {
+        feedbackOverlay.classList.remove('opacity-0');
+        feedbackBox.classList.remove('scale-50');
+        feedbackBox.classList.add('scale-100');
+        
+        if (isCorrect) {
+            feedbackBox.className = "bg-green-50 border-green-400 text-green-600 px-10 py-6 rounded-3xl shadow-2xl border-8 transform scale-100 transition-transform duration-300 text-center";
+            feedbackEmoji.textContent = "🎉";
+            feedbackText.textContent = "เก่งมาก!";
+        } else {
+            feedbackBox.className = "bg-orange-50 border-orange-400 text-orange-600 px-10 py-6 rounded-3xl shadow-2xl border-8 transform scale-100 transition-transform duration-300 text-center";
+            feedbackEmoji.textContent = "😊";
+            feedbackText.textContent = "ลองใหม่นะ";
+        }
+    }
+
+    function hideFeedback() {
+        feedbackOverlay.classList.add('opacity-0');
+        feedbackBox.classList.remove('scale-100');
+        feedbackBox.classList.add('scale-50');
+    }
+
+    function endGame() {
+        isPlaying = false;
+        gameScreen.classList.remove('active');
+        endScreen.classList.add('active');
+        progressFill.style.width = '100%';
+        speak("สุดยอด! หนูทำครบทั้ง 10 ข้อแล้ว!");
+        createConfetti(100); // Lots of confetti
+    }
+
+    // Button Click Listeners (Fallback for mouse/touch)
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('restart-btn').addEventListener('click', startGame);
+    btnLeft.addEventListener('click', () => handleAnswer('btn-left'));
+    btnRight.addEventListener('click', () => handleAnswer('btn-right'));
+
+    function createConfetti(amount = 30) {
+        const colors = ['#facc15', '#f472b6', '#60a5fa', '#34d399', '#a78bfa'];
+        for (let i = 0; i < amount; i++) {
+            const conf = document.createElement('div');
+            conf.classList.add('confetti');
+            conf.style.left = Math.random() * 100 + 'vw';
+            conf.style.top = '-20px';
+            conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            conf.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+            
+            // Random animation values
+            const duration = Math.random() * 2 + 2;
+            const delay = Math.random() * 0.5;
+            const rotation = Math.random() * 360;
+            const tx = (Math.random() - 0.5) * 200;
+            
+            conf.animate([
+                { transform: `translate3d(0,0,0) rotate(0deg)`, opacity: 1 },
+                { transform: `translate3d(${tx}px, 100vh, 0) rotate(${rotation}deg)`, opacity: 0 }
+            ], {
+                duration: duration * 1000,
+                delay: delay * 1000,
+                easing: 'cubic-bezier(.37,0,.63,1)',
+                fill: 'forwards'
+            });
+            
+            document.body.appendChild(conf);
+            setTimeout(() => conf.remove(), (duration + delay) * 1000);
+        }
+    }
+
+    // --- 4. Camera & MediaPipe Integration ---
+    
+    function resizeCanvas() {
+        canvasElement.width = window.innerWidth;
+        canvasElement.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function onResults(results) {
+        // Draw Camera Frame
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+        
+        let handDetected = false;
+
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            handDetected = true;
+            lastHandDetectTime = Date.now();
+            
+            // Loop through detected hands (usually 1 or 2)
+            for (const landmarks of results.multiHandLandmarks) {
+                // Draw Skeleton
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 4});
+                drawLandmarks(canvasCtx, landmarks, {color: '#ec4899', lineWidth: 2, radius: 4});
+
+                // Interaction Logic (Only if game is playing and not transitioning)
+                if (isPlaying && !isTransitioning) {
+                    const indexFinger = landmarks[8];
+                    const thumb = landmarks[4];
+
+                    // Convert normalized coordinates to screen pixels
+                    // Note: Canvas is mirrored via CSS scaleX(-1), so MediaPipe X needs inversion for DOM math
+                    const screenX = (1 - indexFinger.x) * window.innerWidth;
+                    const screenY = indexFinger.y * window.innerHeight;
+
+                    // Check Hover Collision with Buttons
+                    checkHover(screenX, screenY);
+
+                    // Check Pinch Gesture
+                    const dist = Math.hypot(thumb.x - indexFinger.x, thumb.y - indexFinger.y);
+                    const isPinching = dist < 0.04; // Pinch threshold
+
+                    if (isPinching && !wasPinching && hoveredButtonId && !pinchCooldown) {
+                        // Trigger Click
+                        handleAnswer(hoveredButtonId);
+                        
+                        // Cooldown to prevent spam
+                        pinchCooldown = true;
+                        setTimeout(() => { pinchCooldown = false; }, 1000);
+                    }
+                    wasPinching = isPinching;
+                }
+            }
+        } else {
+            // No hand detected handling
+            if (Date.now() - lastHandDetectTime > 2000 && isPlaying) {
+                noHandWarning.classList.remove('opacity-0');
+            }
+            // Clear hovers if no hand
+            clearHovers();
+            wasPinching = false;
+        }
+
+        if (handDetected) {
+            noHandWarning.classList.add('opacity-0');
+        }
+
+        canvasCtx.restore();
+    }
+
+    function checkHover(x, y) {
+        const leftRect = btnLeft.getBoundingClientRect();
+        const rightRect = btnRight.getBoundingClientRect();
+        
+        let newHover = null;
+
+        // Add some padding to hitboxes for easier selection
+        const padding = 20;
+
+        if (x > leftRect.left - padding && x < leftRect.right + padding && 
+            y > leftRect.top - padding && y < leftRect.bottom + padding) {
+            newHover = 'btn-left';
+        } else if (x > rightRect.left - padding && x < rightRect.right + padding && 
+                   y > rightRect.top - padding && y < rightRect.bottom + padding) {
+            newHover = 'btn-right';
+        }
+
+        if (hoveredButtonId !== newHover) {
+            clearHovers();
+            hoveredButtonId = newHover;
+            if (hoveredButtonId === 'btn-left') {
+                btnLeft.classList.add('hovered');
+            } else if (hoveredButtonId === 'btn-right') {
+                btnRight.classList.add('hovered');
+            }
+        }
+    }
+
+    function clearHovers() {
+        btnLeft.classList.remove('hovered');
+        btnRight.classList.remove('hovered');
+        hoveredButtonId = null;
+    }
+
+    // Initialize MediaPipe Hands
+    const hands = new Hands({locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+    }});
+    
+    hands.setOptions({
+        maxNumHands: 2, // Support both left and right hand
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+    });
+    
     hands.onResults(onResults);
 
+    // Start Camera
     const camera = new Camera(videoElement, {
-      onFrame: async () => { await hands.send({image: videoElement}); },
-      width: 640, height: 480, facingMode: 'user'
+        onFrame: async () => {
+            await hands.send({image: videoElement});
+        },
+        width: 1280,
+        height: 720,
+        facingMode: "user" // Force front camera
     });
-    await camera.start();
-    camStarted = true;
-    camStatus.textContent = '';
-    startGame();
-  }catch(err){
-    console.error(err);
-    camStatus.textContent = '⚠️ เปิดกล้องไม่ได้ — เล่นด้วยการแตะหน้าจอแทนได้เลย';
-    startGame(); // fallback: เล่นด้วยการแตะ
-  }
-}
+    
+    // Start camera immediately on load
+    camera.start().catch(err => {
+        console.error("Camera error:", err);
+        alert("ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตการเข้าถึงกล้อง");
+    });
+
 </script>
 </body>
 </html>
