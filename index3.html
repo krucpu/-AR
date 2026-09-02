@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Guess the Word!</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Fredoka', 'Kanit', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #fef3c7;
+            touch-action: none;
+            user-select: none;
+        }
+
+        #video-container {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: 1;
+        }
+
+        #output_canvas {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        .hidden-video { display: none; }
+
+        #ui-layer {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .pointer-events-auto { pointer-events: auto; }
+
+        .thai-read {
+            font-family: 'Kanit', sans-serif;
+            font-weight: 400;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(5deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+
+        @keyframes bounce-in {
+            0% { transform: scale(0.5); opacity: 0; }
+            60% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-bounce-in {
+            animation: bounce-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(250, 204, 21, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+        }
+
+        @keyframes sound-wave {
+            0%, 100% { transform: scaleY(0.4); }
+            50% { transform: scaleY(1); }
+        }
+        .wave-bar {
+            width: 4px; height: 18px;
+            border-radius: 4px;
+            background: #fff;
+            animation: sound-wave 0.5s ease-in-out infinite;
+        }
+        .wave-bar:nth-child(2) { animation-delay: 0.12s; }
+        .wave-bar:nth-child(3) { animation-delay: 0.24s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.36s; }
+
+        .choice-btn {
+            transition: all 0.2s ease;
+            transform-origin: center;
+        }
+
+        .choice-btn.hovered {
+            transform: scale(1.15);
+            border-color: #facc15;
+            animation: pulse-glow 1s infinite;
+            z-index: 20;
+        }
+
+        .choice-btn.wrong-shake {
+            animation: shake 0.4s;
+            background-color: #fee2e2;
+            border-color: #ef4444;
+            color: #b91c1c;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            50% { transform: translateX(10px); }
+            75% { transform: translateX(-10px); }
+        }
+
+        .confetti {
+            position: absolute;
+            width: 15px; height: 15px;
+            background-color: #f00;
+            z-index: 50;
+            opacity: 0;
+        }
+
+        #progress-fill { transition: width 0.3s ease; }
+
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+        }
+        .screen.active { opacity: 1; visibility: visible; }
+
+        #game-screen {
+            background: transparent;
+            backdrop-filter: none;
+        }
+
+        .emoji {
+            font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','Android Emoji',sans-serif;
+        }
+
+        #pinch-hint {
+            position: absolute;
+            top: -30px; left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #db2777;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            white-space: nowrap;
+            font-family: 'Kanit', sans-serif;
+        }
+        .choice-btn.hovered #pinch-hint { opacity: 1; }
+    </style>
+</head>
+<body>
+
+    <!-- Camera Layer -->
+    <div id="video-container">
+        <video id="input_video" class="hidden-video" autoplay playsinline></video>
+        <canvas id="output_canvas"></canvas>
+    </div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer">
+
+        <!-- Decorations -->
+        <div class="emoji absolute top-2 left-2 text-4xl animate-float" style="animation-delay: 0s;">🅰️</div>
+        <div class="emoji absolute bottom-4 left-4 text-6xl animate-float" style="animation-delay: 0.5s;">📖</div>
+        <div class="emoji absolute bottom-4 right-4 text-5xl animate-float" style="animation-delay: 1.5s;">🎈</div>
+        <div class="emoji absolute top-1/3 left-2 text-4xl animate-float" style="animation-delay: 2s;">🦋</div>
+        <div class="emoji absolute top-1/2 right-2 text-4xl animate-float" style="animation-delay: 0.8s;">🌈</div>
+
+        <!-- Audio Controls -->
+        <div class="absolute top-4 right-4 flex gap-2 z-50">
+            <button id="speed-btn" class="thai-read bg-white px-4 py-3 rounded-full shadow-lg text-base font-bold text-orange-500 pointer-events-auto hover:bg-orange-50 transition-colors">
+                🐇 เร็ว
+            </button>
+            <button id="lang-btn" class="bg-white px-4 py-3 rounded-full shadow-lg text-base font-bold text-purple-600 pointer-events-auto hover:bg-purple-50 transition-colors">
+                EN + TH
+            </button>
+            <button id="mute-btn" class="bg-white p-3 rounded-full shadow-lg text-2xl pointer-events-auto hover:bg-gray-100 transition-colors">
+                🔊
+            </button>
+        </div>
+
+        <!-- Speaking Indicator -->
+        <div id="speaking-indicator" class="absolute top-20 right-4 bg-purple-500 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 opacity-0 transition-opacity duration-200 z-50">
+            <div class="flex items-end gap-1 h-5">
+                <div class="wave-bar"></div><div class="wave-bar"></div>
+                <div class="wave-bar"></div><div class="wave-bar"></div>
+            </div>
+            <span id="speaking-lang" class="text-sm font-bold">EN</span>
+        </div>
+
+        <!-- No Hand Warning -->
+        <div id="no-hand-warning" class="thai-read absolute top-20 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-white font-bold px-6 py-2 rounded-full shadow-lg opacity-0 transition-opacity duration-300 z-50">
+            👋 ยกมือขึ้นมาในกล้องนะ
+        </div>
+
+        <!-- START SCREEN -->
+        <div id="start-screen" class="screen active z-40 pointer-events-auto">
+            <div class="bg-white/90 p-8 rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] text-center max-w-md w-[90%] border-4 border-purple-300">
+                <h1 class="text-4xl md:text-5xl font-extrabold text-purple-600 mb-2 tracking-wide drop-shadow-md">
+                    🎯 Guess the Word!
+                </h1>
+                <p class="thai-read text-lg text-gray-500 mb-4 font-semibold">ทายคำศัพท์จากอิโมจิ · 20 ข้อ</p>
+                <p class="thai-read text-lg text-gray-700 mb-4 font-semibold">
+                    ดูรูปแล้ว <span class="text-pink-500 font-bold">จีบนิ้ว</span> เพื่อเลือกคำตอบ 🤏
+                </p>
+
+                <!-- Thai voice test -->
+                <div class="thai-read bg-purple-50 rounded-2xl px-4 py-3 mb-4">
+                    <p class="text-purple-700 font-bold mb-2">🔊 ตอบถูกจะได้ยิน</p>
+                    <p class="text-sm text-purple-500 mb-3">คำอังกฤษ → แล้วแปลไทยทันที</p>
+                    <button id="test-voice-btn" class="bg-purple-500 text-white font-bold text-base py-2 px-5 rounded-full shadow hover:bg-purple-600 transition-colors">
+                        ▶️ ทดสอบเสียงไทย
+                    </button>
+                    <p id="voice-status" class="text-xs text-gray-400 mt-2">กำลังตรวจสอบเสียง...</p>
+                </div>
+
+                <button id="start-btn" class="bg-gradient-to-r from-purple-400 to-pink-500 text-white font-bold text-2xl py-4 px-10 rounded-full shadow-[0_8px_0_#6b21a8] hover:translate-y-1 hover:shadow-[0_4px_0_#6b21a8] transition-all w-full">
+                    Start Game! 🎮
+                </button>
+            </div>
+        </div>
+
+        <!-- GAME SCREEN -->
+        <div id="game-screen" class="screen z-30">
+
+            <div class="absolute top-4 left-1/2 transform -translate-x-1/2 w-[80%] max-w-2xl bg-white/90 rounded-2xl p-3 shadow-lg border-2 border-purple-200 flex flex-col items-center gap-2">
+                <div class="flex justify-between items-center w-full px-4">
+                    <span class="text-xl md:text-2xl font-bold text-purple-600">🎯 Guess the Word</span>
+                    <span id="progress-text" class="text-xl md:text-2xl font-extrabold text-orange-500">⭐ 1 / 20</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div id="progress-fill" class="bg-gradient-to-r from-yellow-400 to-orange-500 h-full rounded-full w-0"></div>
+                </div>
+            </div>
+
+            <div class="flex flex-col items-center mt-16 mb-6 pointer-events-none">
+                <div id="question-image" class="emoji text-[110px] md:text-[140px] leading-none drop-shadow-2xl animate-bounce-in bg-white/70 rounded-full p-4 border-4 border-white shadow-xl"></div>
+                <div class="mt-4 bg-white/90 px-8 py-2 rounded-full shadow-lg border-2 border-green-300 text-center">
+                    <h2 class="text-2xl md:text-3xl font-bold text-green-700">What is this word?</h2>
+                    <p class="thai-read text-base md:text-lg text-gray-500">คำนี้คือคำว่าอะไร?</p>
+                </div>
+            </div>
+
+            <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 w-[95%] max-w-4xl flex flex-row justify-center gap-4 md:gap-10">
+                <button id="btn-left" class="choice-btn pointer-events-auto relative bg-white border-8 border-pink-400 text-pink-600 py-4 md:py-6 rounded-3xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] w-1/2 max-w-[320px] flex flex-col justify-center items-center text-center px-2 gap-1">
+                    <span id="text-left" class="font-extrabold text-3xl md:text-5xl leading-tight">Choice</span>
+                    <span id="read-left" class="thai-read text-lg md:text-2xl text-gray-500 font-semibold leading-tight">คำอ่าน</span>
+                    <div id="pinch-hint">🤏 จีบนิ้วเพื่อเลือก</div>
+                </button>
+
+                <button id="btn-right" class="choice-btn pointer-events-auto relative bg-white border-8 border-blue-400 text-blue-600 py-4 md:py-6 rounded-3xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] w-1/2 max-w-[320px] flex flex-col justify-center items-center text-center px-2 gap-1">
+                    <span id="text-right" class="font-extrabold text-3xl md:text-5xl leading-tight">Choice</span>
+                    <span id="read-right" class="thai-read text-lg md:text-2xl text-gray-500 font-semibold leading-tight">คำอ่าน</span>
+                    <div id="pinch-hint">🤏 จีบนิ้วเพื่อเลือก</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- FEEDBACK -->
+        <div id="feedback-overlay" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 opacity-0 transition-opacity duration-300 flex flex-col items-center pointer-events-none">
+            <div id="feedback-box" class="bg-white px-10 py-6 rounded-3xl shadow-2xl border-4 transform scale-50 transition-transform duration-300 text-center">
+                <div id="feedback-emoji" class="text-6xl mb-2">🎉</div>
+                <h2 id="feedback-text" class="text-4xl font-extrabold">Great job!</h2>
+                <p id="feedback-read" class="thai-read text-xl text-gray-500 mt-1"></p>
+                <p id="feedback-meaning" class="thai-read text-3xl font-bold text-gray-700 mt-1"></p>
+                <button id="replay-btn" class="thai-read mt-4 bg-purple-100 text-purple-600 font-bold text-lg py-2 px-6 rounded-full pointer-events-auto hover:bg-purple-200 transition-colors">
+                    🔁 ฟังอีกครั้ง
+                </button>
+            </div>
+        </div>
+
+        <!-- END SCREEN -->
+        <div id="end-screen" class="screen z-40 pointer-events-auto">
+            <div class="bg-white/95 p-10 rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.2)] text-center max-w-lg w-[90%] border-8 border-yellow-400 relative">
+                <div class="absolute -top-16 left-1/2 transform -translate-x-1/2 text-8xl">🏆</div>
+                <h1 class="text-5xl font-extrabold text-yellow-500 mt-8 mb-4 drop-shadow-md">Awesome!</h1>
+                <p class="text-2xl text-gray-700 mb-1 font-bold">You finished all the words!</p>
+                <p class="thai-read text-lg text-gray-500 mb-4">เก่งมาก! ทำครบทุกข้อแล้ว</p>
+                <div class="text-4xl font-black text-green-500 mb-8 bg-green-100 rounded-full py-2 px-6 inline-block">20 / 20</div>
+                <div class="emoji flex justify-center gap-4 text-4xl mb-8">
+                    <span>🌟</span><span>📚</span><span>🎈</span><span>🌈</span>
+                </div>
+                <button id="restart-btn" class="bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold text-3xl py-4 px-10 rounded-full shadow-[0_8px_0_#047857] hover:translate-y-1 hover:shadow-[0_4px_0_#047857] transition-all w-full flex items-center justify-center gap-3">
+                    <span>🔄</span> Play Again
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+<script>
+    // --- 1. Game Data ---
+    const allQuestions = [
+        { image: '🐈',  correct: 'cat',    correctRead: 'แคท',      meaning: 'แมว',        wrong: 'cap',    wrongRead: 'แคป' },
+        { image: '🐕',  correct: 'dog',    correctRead: 'ด็อก',     meaning: 'สุนัข',      wrong: 'dot',    wrongRead: 'ด็อท' },
+        { image: '🐟',  correct: 'fish',   correctRead: 'ฟิช',      meaning: 'ปลา',        wrong: 'fist',   wrongRead: 'ฟิสท์' },
+        { image: '🐝',  correct: 'bee',    correctRead: 'บี',       meaning: 'ผึ้ง',       wrong: 'bear',   wrongRead: 'แบร์' },
+        { image: '🐦',  correct: 'bird',   correctRead: 'เบิร์ด',   meaning: 'นก',         wrong: 'bread',  wrongRead: 'เบรด' },
+        { image: '🍎',  correct: 'apple',  correctRead: 'แอป-เพิล', meaning: 'แอปเปิล',    wrong: 'ample',  wrongRead: 'แอม-เพิล' },
+        { image: '🍌',  correct: 'banana', correctRead: 'บะ-แน-นะ', meaning: 'กล้วย',      wrong: 'bandana',wrongRead: 'แบน-ดา-นะ' },
+        { image: '🎂',  correct: 'cake',   correctRead: 'เค้ก',     meaning: 'ขนมเค้ก',    wrong: 'lake',   wrongRead: 'เลค' },
+        { image: '🥛',  correct: 'milk',   correctRead: 'มิลก์',    meaning: 'นม',         wrong: 'silk',   wrongRead: 'ซิลก์' },
+        { image: '🌳',  correct: 'tree',   correctRead: 'ทรี',      meaning: 'ต้นไม้',     wrong: 'three',  wrongRead: 'ธรี' },
+        { image: '⭐',  correct: 'star',   correctRead: 'สตาร์',    meaning: 'ดวงดาว',     wrong: 'stair',  wrongRead: 'สแตร์' },
+        { image: '🌙',  correct: 'moon',   correctRead: 'มูน',      meaning: 'พระจันทร์',  wrong: 'spoon',  wrongRead: 'สปูน' },
+        { image: '☀️',  correct: 'sun',    correctRead: 'ซัน',      meaning: 'ดวงอาทิตย์', wrong: 'swan',   wrongRead: 'สวอน' },
+        { image: '🌧️',  correct: 'rain',   correctRead: 'เรน',      meaning: 'ฝน',         wrong: 'train',  wrongRead: 'เทรน' },
+        { image: '🏠',  correct: 'house',  correctRead: 'เฮาส์',    meaning: 'บ้าน',       wrong: 'horse',  wrongRead: 'ฮอร์ส' },
+        { image: '🚗',  correct: 'car',    correctRead: 'คาร์',     meaning: 'รถยนต์',     wrong: 'card',   wrongRead: 'คาร์ด' },
+        { image: '🕐',  correct: 'clock',  correctRead: 'คล็อก',    meaning: 'นาฬิกา',     wrong: 'block',  wrongRead: 'บล็อก' },
+        { image: '🧦',  correct: 'socks',  correctRead: 'ซ็อกส์',   meaning: 'ถุงเท้า',    wrong: 'rocks',  wrongRead: 'ร็อกส์' },
+        { image: '✏️',  correct: 'pencil', correctRead: 'เพ็น-ซิล', meaning: 'ดินสอ',      wrong: 'candle', wrongRead: 'แคน-เดิล' },
+        { image: '📚',  correct: 'books',  correctRead: 'บุ๊กส์',   meaning: 'หนังสือ',    wrong: 'boxes',  wrongRead: 'บ็อก-ซิส' }
+    ];
+
+    const TOTAL_QUESTIONS = allQuestions.length;
+
+    let currentQuestionIndex = 0;
+    let currentOptions = [];
+    let isPlaying = false;
+    let isMuted = false;
+    let bilingualMode = true;
+    let isTransitioning = false;
+    let questionSides = [];
+    let lastSpokenSequence = null;
+
+    // --- Speed control ---
+    const SPEED_LEVELS = [1.0, 1.25, 1.5];
+    const SPEED_LABELS = ['🐢 ปกติ', '🐇 เร็ว', '⚡ เร็วมาก'];
+    // หน่วงเวลาเปลี่ยนข้อ (ms) ของแต่ละระดับ: [ตอบถูก, ตอบผิด]
+    const SPEED_DELAYS = [[3400, 1900], [2800, 1600], [2300, 1300]];
+    let speedIndex = 1;                              // เริ่มต้นที่ "เร็ว"
+    let speedMultiplier = SPEED_LEVELS[speedIndex];
+
+    let hoveredButtonId = null;
+    let wasPinching = false;
+    let pinchCooldown = false;
+    let lastHandDetectTime = Date.now();
+
+    // DOM
+    const startScreen = document.getElementById('start-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const endScreen = document.getElementById('end-screen');
+    const questionImage = document.getElementById('question-image');
+    const btnLeft = document.getElementById('btn-left');
+    const btnRight = document.getElementById('btn-right');
+    const textLeft = document.getElementById('text-left');
+    const textRight = document.getElementById('text-right');
+    const readLeft = document.getElementById('read-left');
+    const readRight = document.getElementById('read-right');
+    const progressText = document.getElementById('progress-text');
+    const progressFill = document.getElementById('progress-fill');
+    const feedbackOverlay = document.getElementById('feedback-overlay');
+    const feedbackBox = document.getElementById('feedback-box');
+    const feedbackEmoji = document.getElementById('feedback-emoji');
+    const feedbackText = document.getElementById('feedback-text');
+    const feedbackRead = document.getElementById('feedback-read');
+    const feedbackMeaning = document.getElementById('feedback-meaning');
+    const replayBtn = document.getElementById('replay-btn');
+    const noHandWarning = document.getElementById('no-hand-warning');
+    const muteBtn = document.getElementById('mute-btn');
+    const langBtn = document.getElementById('lang-btn');
+    const speedBtn = document.getElementById('speed-btn');
+    const speakingIndicator = document.getElementById('speaking-indicator');
+    const speakingLang = document.getElementById('speaking-lang');
+    const testVoiceBtn = document.getElementById('test-voice-btn');
+    const voiceStatus = document.getElementById('voice-status');
+
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    const BTN_BASE = "choice-btn pointer-events-auto relative bg-white py-4 md:py-6 rounded-3xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] w-1/2 max-w-[320px] flex flex-col justify-center items-center text-center px-2 gap-1";
+    const BTN_LEFT_COLORS = " border-8 border-pink-400 text-pink-600";
+    const BTN_RIGHT_COLORS = " border-8 border-blue-400 text-blue-600";
+
+    function generateBalancedSides() {
+        const half = TOTAL_QUESTIONS / 2;
+        let valid = false, sides = [];
+        while (!valid) {
+            sides = [];
+            let leftCount = 0, rightCount = 0;
+            for (let i = 0; i < TOTAL_QUESTIONS; i++) {
+                let choice;
+                if (leftCount >= half) choice = 'right';
+                else if (rightCount >= half) choice = 'left';
+                else choice = Math.random() < 0.5 ? 'left' : 'right';
+                if (choice === 'left') leftCount++; else rightCount++;
+                sides.push(choice);
+            }
+            let maxC = 1, curC = 1;
+            for (let i = 1; i < sides.length; i++) {
+                if (sides[i] === sides[i - 1]) { curC++; if (curC > maxC) maxC = curC; }
+                else curC = 1;
+            }
+            if (maxC <= 2 && leftCount === half && rightCount === half) valid = true;
+        }
+        return sides;
+    }
+
+    // ============================================================
+    // 2. BILINGUAL AUDIO ENGINE (3-layer Thai fallback)
+    //    Layer 1: native th-TH SpeechSynthesis voice
+    //    Layer 2: Google Translate TTS audio stream
+    //    Layer 3: skip safely (never blocks the game)
+    // ============================================================
+    let availableVoices = [];
+    let thaiVoice = null;
+    let englishVoice = null;
+    let speechUnlocked = false;
+    let currentAudio = null;
+
+    function loadVoices() {
+        availableVoices = window.speechSynthesis.getVoices() || [];
+
+        const thMatches = availableVoices.filter(v =>
+            v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('th')
+        );
+        thaiVoice = thMatches.find(v => v.localService) || thMatches[0] || null;
+
+        const enMatches = availableVoices.filter(v =>
+            v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('en')
+        );
+        englishVoice = enMatches.find(v => /en-US/i.test(v.lang) && v.localService)
+                    || enMatches.find(v => /en-US/i.test(v.lang))
+                    || enMatches[0] || null;
+
+        updateVoiceStatus();
+    }
+
+    function updateVoiceStatus() {
+        if (!voiceStatus) return;
+        if (thaiVoice) {
+            voiceStatus.textContent = `✅ พบเสียงไทย: ${thaiVoice.name}`;
+            voiceStatus.className = "text-xs text-green-500 mt-2";
+        } else {
+            voiceStatus.textContent = "🌐 ไม่พบเสียงไทยในเครื่อง — จะใช้เสียงออนไลน์แทน";
+            voiceStatus.className = "text-xs text-orange-500 mt-2";
+        }
+    }
+
+    loadVoices();
+    if (typeof speechSynthesis !== 'undefined') {
+        speechSynthesis.onvoiceschanged = loadVoices;
+        setTimeout(loadVoices, 500);
+        setTimeout(loadVoices, 1500);
+    }
+
+    // iOS/Safari ต้องมี user gesture ก่อนถึงจะพูดได้
+    function unlockSpeech() {
+        if (speechUnlocked) return;
+        try {
+            const warm = new SpeechSynthesisUtterance(' ');
+            warm.volume = 0;
+            window.speechSynthesis.speak(warm);
+            speechUnlocked = true;
+            loadVoices();
+        } catch (e) { /* ignore */ }
+    }
+    document.addEventListener('click', unlockSpeech, { once: true });
+    document.addEventListener('touchstart', unlockSpeech, { once: true });
+
+    function showSpeakingIndicator(label) {
+        speakingLang.textContent = label;
+        speakingIndicator.classList.remove('opacity-0');
+    }
+    function hideSpeakingIndicator() {
+        speakingIndicator.classList.add('opacity-0');
+    }
+
+    function stopAllAudio() {
+        window.speechSynthesis.cancel();
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+        }
+    }
+
+    // --- Layer 2: online Thai TTS fallback (ปรับความเร็วด้วย playbackRate) ---
+    function playOnlineThai(text, onDone) {
+        try {
+            const url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=th&q='
+                        + encodeURIComponent(text);
+            const audio = new Audio(url);
+            audio.playbackRate = Math.min(2, 1.05 * speedMultiplier);
+            currentAudio = audio;
+
+            let finished = false;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                currentAudio = null;
+                onDone();
+            };
+            audio.onended = finish;
+            audio.onerror = finish;
+            setTimeout(finish, 5000); // safety timeout
+            audio.play().catch(finish);
+        } catch (e) {
+            onDone();
+        }
+    }
+
+    /**
+     * เล่นเสียงเรียงทีละประโยค
+     * phrases: [{ text, lang: 'en'|'th', rate, pitch, gap }]
+     */
+    function speakSequence(phrases, remember = true) {
+        if (isMuted) return;
+        stopAllAudio();
+
+        if (remember) lastSpokenSequence = phrases;
+
+        const queue = phrases.filter(p => p.lang !== 'th' || bilingualMode);
+        if (!queue.length) { hideSpeakingIndicator(); return; }
+
+        let idx = 0;
+
+        function playNext() {
+            if (idx >= queue.length) { hideSpeakingIndicator(); return; }
+            const p = queue[idx++];
+            const isThai = p.lang === 'th';
+            showSpeakingIndicator(isThai ? 'TH' : 'EN');
+
+            // ช่องว่างระหว่างประโยค — สั้นลงเมื่อเร่งความเร็ว
+            const gapMs = Math.round((p.gap ?? 120) / speedMultiplier);
+            const goNext = () => setTimeout(playNext, gapMs);
+
+            // ไทยแต่ไม่มีเสียงในเครื่อง → ใช้เสียงออนไลน์
+            if (isThai && !thaiVoice) {
+                playOnlineThai(p.text, goNext);
+                return;
+            }
+
+            const u = new SpeechSynthesisUtterance(p.text);
+            u.lang = isThai ? 'th-TH' : 'en-US';
+            if (isThai && thaiVoice) u.voice = thaiVoice;
+            if (!isThai && englishVoice) u.voice = englishVoice;
+
+            const baseRate = p.rate ?? (isThai ? 1.15 : 1.0);
+            u.rate = Math.min(2, baseRate * speedMultiplier);
+            u.pitch = p.pitch ?? 1.15;
+            u.volume = 1;
+
+            let done = false;
+            const finish = () => { if (!done) { done = true; goNext(); } };
+
+            u.onend = finish;
+            u.onerror = () => {
+                if (isThai) playOnlineThai(p.text, finish);
+                else finish();
+            };
+
+            window.speechSynthesis.speak(u);
+
+            // Watchdog — บาง browser ไม่ยิง onend
+            const estimate = Math.max(1400, p.text.length * 85) / speedMultiplier;
+            setTimeout(() => { if (!done) finish(); }, estimate);
+        }
+
+        playNext();
+    }
+
+    function speak(text, lang = 'en') {
+        speakSequence([{ text, lang }], false);
+    }
+
+    // --- Controls ---
+    muteBtn.addEventListener('click', () => {
+        isMuted = !isMuted;
+        muteBtn.textContent = isMuted ? '🔇' : '🔊';
+        if (isMuted) { stopAllAudio(); hideSpeakingIndicator(); }
+    });
+
+    langBtn.addEventListener('click', () => {
+        bilingualMode = !bilingualMode;
+        langBtn.textContent = bilingualMode ? 'EN + TH' : 'EN only';
+        langBtn.className = bilingualMode
+            ? "bg-white px-4 py-3 rounded-full shadow-lg text-base font-bold text-purple-600 pointer-events-auto hover:bg-purple-50 transition-colors"
+            : "bg-white px-4 py-3 rounded-full shadow-lg text-base font-bold text-gray-400 pointer-events-auto hover:bg-gray-50 transition-colors";
+    });
+
+    speedBtn.addEventListener('click', () => {
+        speedIndex = (speedIndex + 1) % SPEED_LEVELS.length;
+        speedMultiplier = SPEED_LEVELS[speedIndex];
+        speedBtn.textContent = SPEED_LABELS[speedIndex];
+        stopAllAudio();
+        hideSpeakingIndicator();
+        // ตัวอย่างเสียงความเร็วใหม่
+        speakSequence([{ text: 'cat แปลว่า แมว', lang: 'th' }], false);
+    });
+
+    testVoiceBtn.addEventListener('click', () => {
+        unlockSpeech();
+        loadVoices();
+        speakSequence([
+            { text: 'cat', lang: 'en', rate: 0.95, gap: 100 },
+            { text: 'cat แปลว่า แมว', lang: 'th', rate: 1.2 }
+        ], false);
+    });
+
+    replayBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (lastSpokenSequence) speakSequence(lastSpokenSequence, false);
+    });
+
+    // --- 3. Game Logic ---
+    function startGame() {
+        unlockSpeech();
+        currentQuestionIndex = 0;
+        isPlaying = true;
+        isTransitioning = false;
+        questionSides = generateBalancedSides();
+
+        startScreen.classList.remove('active');
+        endScreen.classList.remove('active');
+        gameScreen.classList.add('active');
+
+        speakSequence([
+            { text: "Let's go!", lang: 'en', gap: 100 },
+            { text: 'ไปกันเลย!', lang: 'th' }
+        ], false);
+
+        loadQuestion(currentQuestionIndex);
+    }
+
+    function loadQuestion(index) {
+        if (index >= allQuestions.length) { endGame(); return; }
+
+        const q = allQuestions[index];
+        questionImage.textContent = q.image;
+
+        progressText.textContent = `⭐ ${index + 1} / ${TOTAL_QUESTIONS}`;
+        progressFill.style.width = `${(index / TOTAL_QUESTIONS) * 100}%`;
+
+        const correctSide = questionSides[index];
+        let options;
+        if (correctSide === 'left') {
+            options = [
+                { text: q.correct, read: q.correctRead, meaning: q.meaning, isCorrect: true },
+                { text: q.wrong,   read: q.wrongRead,   meaning: '',        isCorrect: false }
+            ];
+        } else {
+            options = [
+                { text: q.wrong,   read: q.wrongRead,   meaning: '',        isCorrect: false },
+                { text: q.correct, read: q.correctRead, meaning: q.meaning, isCorrect: true }
+            ];
+        }
+
+        currentOptions = options;
+        textLeft.textContent  = options[0].text;
+        readLeft.textContent  = options[0].read;
+        textRight.textContent = options[1].text;
+        readRight.textContent = options[1].read;
+
+        btnLeft.className  = BTN_BASE + BTN_LEFT_COLORS;
+        btnRight.className = BTN_BASE + BTN_RIGHT_COLORS;
+
+        questionImage.classList.remove('animate-bounce-in');
+        void questionImage.offsetWidth;
+        questionImage.classList.add('animate-bounce-in');
+    }
+
+    function handleAnswer(btnId) {
+        if (!isPlaying || isTransitioning) return;
+        isTransitioning = true;
+
+        const isLeft = btnId === 'btn-left';
+        const selected = isLeft ? currentOptions[0] : currentOptions[1];
+        const targetBtn = isLeft ? btnLeft : btnRight;
+        const [correctDelay, wrongDelay] = SPEED_DELAYS[speedIndex];
+
+        if (selected.isCorrect) {
+            speakSequence([
+                { text: selected.text, lang: 'en', rate: 0.95, gap: 100 },
+                { text: `${selected.text} แปลว่า ${selected.meaning}`, lang: 'th', rate: 1.2, gap: 80 },
+                { text: selected.meaning, lang: 'th', rate: 1.1 }
+            ]);
+
+            showFeedback(true, selected);
+            createConfetti();
+            targetBtn.classList.add('bg-green-100', 'border-green-500', 'text-green-600');
+
+            setTimeout(() => {
+                currentQuestionIndex++;
+                hideFeedback();
+                isTransitioning = false;
+                loadQuestion(currentQuestionIndex);
+            }, correctDelay);
+
+        } else {
+            speakSequence([
+                { text: 'Try again!', lang: 'en', gap: 100 },
+                { text: 'ลองใหม่อีกครั้งนะ', lang: 'th', rate: 1.2 }
+            ], false);
+
+            showFeedback(false, selected);
+            targetBtn.classList.add('wrong-shake');
+
+            setTimeout(() => {
+                targetBtn.classList.remove('wrong-shake');
+                hideFeedback();
+                isTransitioning = false;
+            }, wrongDelay);
+        }
+    }
+
+    function showFeedback(isCorrect, option) {
+        feedbackOverlay.classList.remove('opacity-0');
+        feedbackBox.classList.remove('scale-50');
+        feedbackBox.classList.add('scale-100');
+
+        if (isCorrect) {
+            feedbackBox.className = "bg-green-50 border-green-400 text-green-600 px-10 py-6 rounded-3xl shadow-2xl border-8 transform scale-100 transition-transform duration-300 text-center";
+            feedbackEmoji.textContent = "🎉";
+            feedbackText.textContent = option.text;
+            feedbackRead.textContent = `อ่านว่า "${option.read}"`;
+            feedbackMeaning.textContent = `แปลว่า ${option.meaning}`;
+            replayBtn.style.display = 'inline-block';
+        } else {
+            feedbackBox.className = "bg-orange-50 border-orange-400 text-orange-600 px-10 py-6 rounded-3xl shadow-2xl border-8 transform scale-100 transition-transform duration-300 text-center";
+            feedbackEmoji.textContent = "😊";
+            feedbackText.textContent = "Try again!";
+            feedbackRead.textContent = "ลองใหม่อีกครั้งนะ";
+            feedbackMeaning.textContent = "";
+            replayBtn.style.display = 'none';
+        }
+    }
+
+    function hideFeedback() {
+        feedbackOverlay.classList.add('opacity-0');
+        feedbackBox.classList.remove('scale-100');
+        feedbackBox.classList.add('scale-50');
+    }
+
+    function endGame() {
+        isPlaying = false;
+        gameScreen.classList.remove('active');
+        endScreen.classList.add('active');
+        progressFill.style.width = '100%';
+        speakSequence([
+            { text: `Amazing! You finished all ${TOTAL_QUESTIONS} words!`, lang: 'en', gap: 150 },
+            { text: `เก่งมาก! ทำครบทั้ง ${TOTAL_QUESTIONS} ข้อแล้ว`, lang: 'th', rate: 1.2 }
+        ], false);
+        createConfetti(100);
+    }
+
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('restart-btn').addEventListener('click', startGame);
+    btnLeft.addEventListener('click', () => handleAnswer('btn-left'));
+    btnRight.addEventListener('click', () => handleAnswer('btn-right'));
+
+    function createConfetti(amount = 30) {
+        const colors = ['#facc15', '#f472b6', '#60a5fa', '#34d399', '#a78bfa'];
+        for (let i = 0; i < amount; i++) {
+            const conf = document.createElement('div');
+            conf.classList.add('confetti');
+            conf.style.left = Math.random() * 100 + 'vw';
+            conf.style.top = '-20px';
+            conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            conf.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+
+            const duration = Math.random() * 1.5 + 1.5;
+            const delay = Math.random() * 0.4;
+            const rotation = Math.random() * 360;
+            const tx = (Math.random() - 0.5) * 200;
+
+            conf.animate([
+                { transform: `translate3d(0,0,0) rotate(0deg)`, opacity: 1 },
+                { transform: `translate3d(${tx}px, 100vh, 0) rotate(${rotation}deg)`, opacity: 0 }
+            ], {
+                duration: duration * 1000,
+                delay: delay * 1000,
+                easing: 'cubic-bezier(.37,0,.63,1)',
+                fill: 'forwards'
+            });
+
+            document.body.appendChild(conf);
+            setTimeout(() => conf.remove(), (duration + delay) * 1000);
+        }
+    }
+
+    // --- 4. Camera & MediaPipe ---
+    function resizeCanvas() {
+        canvasElement.width = window.innerWidth;
+        canvasElement.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function onResults(results) {
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+        let handDetected = false;
+
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            handDetected = true;
+            lastHandDetectTime = Date.now();
+
+            for (const landmarks of results.multiHandLandmarks) {
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 4});
+                drawLandmarks(canvasCtx, landmarks, {color: '#a855f7', lineWidth: 2, radius: 4});
+
+                if (isPlaying && !isTransitioning) {
+                    const indexFinger = landmarks[8];
+                    const thumb = landmarks[4];
+                    const screenX = (1 - indexFinger.x) * window.innerWidth;
+                    const screenY = indexFinger.y * window.innerHeight;
+
+                    checkHover(screenX, screenY);
+
+                    const dist = Math.hypot(thumb.x - indexFinger.x, thumb.y - indexFinger.y);
+                    const isPinching = dist < 0.04;
+
+                    if (isPinching && !wasPinching && hoveredButtonId && !pinchCooldown) {
+                        handleAnswer(hoveredButtonId);
+                        pinchCooldown = true;
+                        setTimeout(() => { pinchCooldown = false; }, 800);
+                    }
+                    wasPinching = isPinching;
+                }
+            }
+        } else {
+            if (Date.now() - lastHandDetectTime > 2000 && isPlaying) {
+                noHandWarning.classList.remove('opacity-0');
+            }
+            clearHovers();
+            wasPinching = false;
+        }
+
+        if (handDetected) noHandWarning.classList.add('opacity-0');
+        canvasCtx.restore();
+    }
+
+    function checkHover(x, y) {
+        const leftRect = btnLeft.getBoundingClientRect();
+        const rightRect = btnRight.getBoundingClientRect();
+        let newHover = null;
+        const padding = 20;
+
+        if (x > leftRect.left - padding && x < leftRect.right + padding &&
+            y > leftRect.top - padding && y < leftRect.bottom + padding) {
+            newHover = 'btn-left';
+        } else if (x > rightRect.left - padding && x < rightRect.right + padding &&
+                   y > rightRect.top - padding && y < rightRect.bottom + padding) {
+            newHover = 'btn-right';
+        }
+
+        if (hoveredButtonId !== newHover) {
+            clearHovers();
+            hoveredButtonId = newHover;
+            if (hoveredButtonId === 'btn-left') btnLeft.classList.add('hovered');
+            else if (hoveredButtonId === 'btn-right') btnRight.classList.add('hovered');
+        }
+    }
+
+    function clearHovers() {
+        btnLeft.classList.remove('hovered');
+        btnRight.classList.remove('hovered');
+        hoveredButtonId = null;
+    }
+
+    const hands = new Hands({locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => { await hands.send({image: videoElement}); },
+        width: 1280,
+        height: 720,
+        facingMode: "user"
+    });
+
+    camera.start().catch(err => {
+        console.error("Camera error:", err);
+        alert("ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตการเข้าถึงกล้อง");
+    });
+
+</script>
+</body>
+</html>
