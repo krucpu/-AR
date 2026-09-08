@@ -232,7 +232,7 @@
 
                 <div class="thai-read bg-purple-50 rounded-2xl px-4 py-3 mb-4">
                     <p class="text-purple-700 font-bold mb-2">🔊 ตอบถูกจะได้ยิน</p>
-                    <p class="text-sm text-purple-500 mb-3">คำอังกฤษ → คำอ่านไทย → แล้วแปลไทยทันที</p>
+                    <p class="text-sm text-purple-500 mb-3">คำอังกฤษ → แล้วแปลไทยทันที</p>
                     <button id="test-voice-btn" class="bg-purple-500 text-white font-bold text-base py-2 px-5 rounded-full shadow hover:bg-purple-600 transition-colors">
                         ▶️ ทดสอบเสียง
                     </button>
@@ -604,7 +604,6 @@
     function buildWordPhrases(q) {
         return [
             { text: q.correct, lang: 'en', gap: 200 },
-            { text: `อ่านว่า ${q.correctRead}`, lang: 'th', gap: 200 },
             { text: `${q.correct} แปลว่า ${q.meaning}`, lang: 'th' }
         ];
     }
@@ -627,7 +626,6 @@
         unlockSpeech();
         speakSequence([
             { text: 'cat', lang: 'en', gap: 200 },
-            { text: 'อ่านว่า แคท', lang: 'th', gap: 200 },
             { text: 'cat แปลว่า แมว', lang: 'th' }
         ], false);
     });
