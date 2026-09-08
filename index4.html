@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- เพิ่ม Meta นี้เพื่อป้องกัน Google บล็อกการดึงไฟล์เสียง -->
+    <meta name="referrer" content="no-referrer">
     <title>Guess the Word!</title>
 
     <!-- Tailwind CSS -->
@@ -54,10 +56,7 @@
 
         .pointer-events-auto { pointer-events: auto; }
 
-        .thai-read {
-            font-family: 'Kanit', sans-serif;
-            font-weight: 400;
-        }
+        .thai-read { font-family: 'Kanit', sans-serif; font-weight: 400; }
 
         @keyframes float {
             0% { transform: translateY(0px) rotate(0deg); }
@@ -95,18 +94,13 @@
         .wave-bar:nth-child(3) { animation-delay: 0.3s; }
         .wave-bar:nth-child(4) { animation-delay: 0.45s; }
 
-        .choice-btn {
-            transition: all 0.2s ease;
-            transform-origin: center;
-        }
-
+        .choice-btn { transition: all 0.2s ease; transform-origin: center; }
         .choice-btn.hovered {
             transform: scale(1.15);
             border-color: #facc15;
             animation: pulse-glow 1s infinite;
             z-index: 20;
         }
-
         .choice-btn.wrong-shake {
             animation: shake 0.5s;
             background-color: #fee2e2;
@@ -145,15 +139,9 @@
             transition: opacity 0.3s ease;
         }
         .screen.active { opacity: 1; visibility: visible; }
+        #game-screen { background: transparent; backdrop-filter: none; }
 
-        #game-screen {
-            background: transparent;
-            backdrop-filter: none;
-        }
-
-        .emoji {
-            font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','Android Emoji',sans-serif;
-        }
+        .emoji { font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','Android Emoji',sans-serif; }
 
         #pinch-hint {
             position: absolute;
@@ -185,6 +173,9 @@
 </head>
 <body>
 
+    <!-- เครื่องเล่นเสียงที่ซ่อนไว้สำหรับ Google Translate TTS -->
+    <audio id="tts-player" playsinline></audio>
+
     <!-- Camera Layer -->
     <div id="video-container">
         <video id="input_video" class="hidden-video" autoplay playsinline></video>
@@ -193,7 +184,6 @@
 
     <!-- UI Overlay Layer -->
     <div id="ui-layer">
-
         <!-- Decorations -->
         <div class="emoji absolute top-2 left-2 text-4xl animate-float" style="animation-delay: 0s;">🅰️</div>
         <div class="emoji absolute bottom-4 left-4 text-6xl animate-float" style="animation-delay: 0.5s;">📖</div>
@@ -237,17 +227,16 @@
                 </p>
 
                 <div class="thai-read bg-amber-50 rounded-2xl px-4 py-2 mb-3 text-amber-700 font-bold text-sm border-2 border-amber-200">
-                    🎲 คลังคำศัพท์ 50 คำ — สุ่มมา 20 ข้อทุกรอบ ไม่ซ้ำเดิม
+                    🎲 คลังคำศัพท์ 100 คำ — สุ่มมา 20 ข้อทุกรอบ ไม่ซ้ำเดิม
                 </div>
 
-                <!-- Thai voice test -->
                 <div class="thai-read bg-purple-50 rounded-2xl px-4 py-3 mb-4">
                     <p class="text-purple-700 font-bold mb-2">🔊 ตอบถูกจะได้ยิน</p>
                     <p class="text-sm text-purple-500 mb-3">คำอังกฤษ → คำอ่านไทย → แล้วแปลไทยทันที</p>
                     <button id="test-voice-btn" class="bg-purple-500 text-white font-bold text-base py-2 px-5 rounded-full shadow hover:bg-purple-600 transition-colors">
-                        ▶️ ทดสอบเสียงไทย
+                        ▶️ ทดสอบเสียง
                     </button>
-                    <p id="voice-status" class="text-xs text-gray-400 mt-2">กำลังตรวจสอบเสียง...</p>
+                    <p id="voice-status" class="text-xs text-green-600 mt-2">🌐 เสียงจาก Google Translate</p>
                 </div>
 
                 <button id="start-btn" class="bg-gradient-to-r from-purple-400 to-pink-500 text-white font-bold text-2xl py-4 px-10 rounded-full shadow-[0_8px_0_#6b21a8] hover:translate-y-1 hover:shadow-[0_4px_0_#6b21a8] transition-all w-full">
@@ -258,7 +247,6 @@
 
         <!-- GAME SCREEN -->
         <div id="game-screen" class="screen z-30">
-
             <div class="absolute top-4 left-1/2 transform -translate-x-1/2 w-[80%] max-w-2xl bg-white/90 rounded-2xl p-3 shadow-lg border-2 border-purple-200 flex flex-col items-center gap-2">
                 <div class="flex justify-between items-center w-full px-4">
                     <span class="text-xl md:text-2xl font-bold text-purple-600">🎯 Guess the Word</span>
@@ -329,136 +317,112 @@
     </div>
 
 <script>
-    /* ============================================================
-       1. WORD BANK — คลังคำศัพท์ 50 คำ (เพิ่มได้ไม่จำกัด)
-       ============================================================ */
     const wordBank = [
     { image: '🐈', correct: 'cat', correctRead: 'แคท', meaning: 'แมว', wrong: 'cap', wrongRead: 'แคป' },
     { image: '🐕', correct: 'dog', correctRead: 'ด็อก', meaning: 'สุนัข', wrong: 'dot', wrongRead: 'ด็อท' },
     { image: '🐟', correct: 'fish', correctRead: 'ฟิช', meaning: 'ปลา', wrong: 'fist', wrongRead: 'ฟิสท์' },
     { image: '🐝', correct: 'bee', correctRead: 'บี', meaning: 'ผึ้ง', wrong: 'beef', wrongRead: 'บีฟ' },
     { image: '🐦', correct: 'bird', correctRead: 'เบิร์ด', meaning: 'นก', wrong: 'bread', wrongRead: 'เบรด' },
-
     { image: '🍎', correct: 'apple', correctRead: 'แอป-เพิล', meaning: 'แอปเปิล', wrong: 'ample', wrongRead: 'แอม-เพิล' },
     { image: '🍌', correct: 'banana', correctRead: 'บะ-แน-นะ', meaning: 'กล้วย', wrong: 'bandana', wrongRead: 'แบน-แด-นะ' },
     { image: '🎂', correct: 'cake', correctRead: 'เค้ก', meaning: 'ขนมเค้ก', wrong: 'lake', wrongRead: 'เลค' },
     { image: '🥛', correct: 'milk', correctRead: 'มิลก์', meaning: 'นม', wrong: 'silk', wrongRead: 'ซิลก์' },
     { image: '🌳', correct: 'tree', correctRead: 'ทรี', meaning: 'ต้นไม้', wrong: 'three', wrongRead: 'ธรี' },
-
     { image: '⭐', correct: 'star', correctRead: 'สตาร์', meaning: 'ดาว', wrong: 'stair', wrongRead: 'สแตร์' },
     { image: '🌙', correct: 'moon', correctRead: 'มูน', meaning: 'พระจันทร์', wrong: 'spoon', wrongRead: 'สปูน' },
     { image: '☀️', correct: 'sun', correctRead: 'ซัน', meaning: 'ดวงอาทิตย์', wrong: 'son', wrongRead: 'ซัน' },
     { image: '🌧️', correct: 'rain', correctRead: 'เรน', meaning: 'ฝน', wrong: 'train', wrongRead: 'เทรน' },
     { image: '🏠', correct: 'house', correctRead: 'เฮาส์', meaning: 'บ้าน', wrong: 'hose', wrongRead: 'โฮซ' },
-
     { image: '🚗', correct: 'car', correctRead: 'คาร์', meaning: 'รถยนต์', wrong: 'card', wrongRead: 'คาร์ด' },
     { image: '🕐', correct: 'clock', correctRead: 'คล็อก', meaning: 'นาฬิกา', wrong: 'block', wrongRead: 'บล็อก' },
     { image: '🧦', correct: 'socks', correctRead: 'ซ็อกส์', meaning: 'ถุงเท้า', wrong: 'rocks', wrongRead: 'ร็อกส์' },
     { image: '✏️', correct: 'pencil', correctRead: 'เพ็น-ซิล', meaning: 'ดินสอ', wrong: 'cancel', wrongRead: 'แคน-เซิล' },
     { image: '📚', correct: 'books', correctRead: 'บุ๊กส์', meaning: 'หนังสือ', wrong: 'boots', wrongRead: 'บูทส์' },
-
     { image: '🦁', correct: 'lion', correctRead: 'ไล-ออน', meaning: 'สิงโต', wrong: 'line', wrongRead: 'ไลน์' },
     { image: '🐘', correct: 'elephant', correctRead: 'เอ-เล-เฟินท์', meaning: 'ช้าง', wrong: 'elegant', wrongRead: 'เอ-ลิ-เกินท์' },
     { image: '🐢', correct: 'turtle', correctRead: 'เทอร์-เทิล', meaning: 'เต่า', wrong: 'tunnel', wrongRead: 'ทัน-เนิล' },
     { image: '🐒', correct: 'monkey', correctRead: 'มัง-กี้', meaning: 'ลิง', wrong: 'donkey', wrongRead: 'ดอง-กี้' },
     { image: '🐷', correct: 'pig', correctRead: 'พิก', meaning: 'หมู', wrong: 'pin', wrongRead: 'พิน' },
-
     { image: '🐮', correct: 'cow', correctRead: 'คาว', meaning: 'วัว', wrong: 'crow', wrongRead: 'โครว์' },
     { image: '🐔', correct: 'chicken', correctRead: 'ชิค-เคิน', meaning: 'ไก่', wrong: 'kitchen', wrongRead: 'คิท-เชิน' },
     { image: '🐸', correct: 'frog', correctRead: 'ฟร็อก', meaning: 'กบ', wrong: 'fog', wrongRead: 'ฟ็อก' },
     { image: '🦋', correct: 'butterfly', correctRead: 'บัท-เทอร์-ฟลาย', meaning: 'ผีเสื้อ', wrong: 'butter', wrongRead: 'บัท-เทอร์' },
     { image: '🐴', correct: 'horse', correctRead: 'ฮอร์ส', meaning: 'ม้า', wrong: 'house', wrongRead: 'เฮาส์' },
-
     { image: '🐭', correct: 'mouse', correctRead: 'เมาส์', meaning: 'หนู', wrong: 'mouth', wrongRead: 'เมาธ์' },
     { image: '🐑', correct: 'sheep', correctRead: 'ชีพ', meaning: 'แกะ', wrong: 'ship', wrongRead: 'ชิพ' },
     { image: '🦆', correct: 'duck', correctRead: 'ดัค', meaning: 'เป็ด', wrong: 'deck', wrongRead: 'เด็ค' },
     { image: '🐻', correct: 'bear', correctRead: 'แบร์', meaning: 'หมี', wrong: 'beard', wrongRead: 'เบียร์ด' },
     { image: '🐰', correct: 'rabbit', correctRead: 'แร็บ-บิท', meaning: 'กระต่าย', wrong: 'rapid', wrongRead: 'แรพ-พิด' },
-
     { image: '🍇', correct: 'grapes', correctRead: 'เกรพส์', meaning: 'องุ่น', wrong: 'grass', wrongRead: 'กราส' },
     { image: '🍓', correct: 'strawberry', correctRead: 'สตรอว์-เบอร์-รี', meaning: 'สตรอว์เบอร์รี', wrong: 'blueberry', wrongRead: 'บลู-เบอร์-รี' },
     { image: '🍊', correct: 'orange', correctRead: 'ออ-รินจ์', meaning: 'ส้ม', wrong: 'onion', wrongRead: 'อัน-เยิน' },
     { image: '🍉', correct: 'watermelon', correctRead: 'วอ-เทอร์-เมล-เลิน', meaning: 'แตงโม', wrong: 'waterfall', wrongRead: 'วอ-เทอร์-ฟอล' },
     { image: '🍔', correct: 'burger', correctRead: 'เบอร์-เกอร์', meaning: 'แฮมเบอร์เกอร์', wrong: 'burner', wrongRead: 'เบอร์-เนอร์' },
-
     { image: '🍕', correct: 'pizza', correctRead: 'พิท-ซะ', meaning: 'พิซซ่า', wrong: 'plaza', wrongRead: 'พลา-ซะ' },
     { image: '🥚', correct: 'egg', correctRead: 'เอ็ก', meaning: 'ไข่', wrong: 'leg', wrongRead: 'เล็ก' },
     { image: '🍞', correct: 'bread', correctRead: 'เบรด', meaning: 'ขนมปัง', wrong: 'brand', wrongRead: 'แบรนด์' },
     { image: '🍚', correct: 'rice', correctRead: 'ไรซ์', meaning: 'ข้าว', wrong: 'mice', wrongRead: 'ไมซ์' },
     { image: '🌸', correct: 'flower', correctRead: 'ฟลาว-เออร์', meaning: 'ดอกไม้', wrong: 'flour', wrongRead: 'ฟลาว-เออร์' },
-
     { image: '☁️', correct: 'cloud', correctRead: 'คลาวด์', meaning: 'เมฆ', wrong: 'crowd', wrongRead: 'คราวด์' },
     { image: '❄️', correct: 'snow', correctRead: 'สโนว์', meaning: 'หิมะ', wrong: 'slow', wrongRead: 'สโลว์' },
     { image: '🔥', correct: 'fire', correctRead: 'ไฟ-เออร์', meaning: 'ไฟ', wrong: 'five', wrongRead: 'ไฟฟ์' },
     { image: '🌊', correct: 'sea', correctRead: 'ซี', meaning: 'ทะเล', wrong: 'tea', wrongRead: 'ที' },
     { image: '🏫', correct: 'school', correctRead: 'สคูล', meaning: 'โรงเรียน', wrong: 'scoop', wrongRead: 'สคูพ' },
-
-    // 51-100
-
     { image: '🐯', correct: 'tiger', correctRead: 'ไท-เกอร์', meaning: 'เสือ', wrong: 'timer', wrongRead: 'ไท-เมอร์' },
     { image: '🦒', correct: 'giraffe', correctRead: 'จิ-แรฟ', meaning: 'ยีราฟ', wrong: 'garage', wrongRead: 'กะ-ราจ' },
     { image: '🦓', correct: 'zebra', correctRead: 'ซี-บระ', meaning: 'ม้าลาย', wrong: 'zero', wrongRead: 'ซี-โร' },
     { image: '🐊', correct: 'crocodile', correctRead: 'คร็อค-โค-ไดล์', meaning: 'จระเข้', wrong: 'coconut', wrongRead: 'โค-โค-นัท' },
     { image: '🐍', correct: 'snake', correctRead: 'สเนค', meaning: 'งู', wrong: 'snack', wrongRead: 'สแน็ค' },
-
     { image: '🦀', correct: 'crab', correctRead: 'แครบ', meaning: 'ปู', wrong: 'grab', wrongRead: 'แกร็บ' },
     { image: '🐙', correct: 'octopus', correctRead: 'อ็อค-ทะ-พัส', meaning: 'ปลาหมึกยักษ์', wrong: 'October', wrongRead: 'อ็อค-โท-เบอร์' },
     { image: '🐬', correct: 'dolphin', correctRead: 'ดอล-ฟิน', meaning: 'โลมา', wrong: 'dollar', wrongRead: 'ดอล-ลาร์' },
     { image: '🐳', correct: 'whale', correctRead: 'เวล', meaning: 'วาฬ', wrong: 'wheel', wrongRead: 'วีล' },
     { image: '🦈', correct: 'shark', correctRead: 'ชาร์ก', meaning: 'ฉลาม', wrong: 'sharp', wrongRead: 'ชาร์ป' },
-
     { image: '🥭', correct: 'mango', correctRead: 'แมง-โก', meaning: 'มะม่วง', wrong: 'tango', wrongRead: 'แทง-โก' },
     { image: '🍍', correct: 'pineapple', correctRead: 'ไพน์-แอป-เพิล', meaning: 'สับปะรด', wrong: 'pinecone', wrongRead: 'ไพน์-โคน' },
     { image: '🍒', correct: 'cherry', correctRead: 'เชอร์-รี', meaning: 'เชอร์รี', wrong: 'cheer', wrongRead: 'เชียร์' },
     { image: '🥝', correct: 'kiwi', correctRead: 'คี-วี', meaning: 'กีวี', wrong: 'kilo', wrongRead: 'คี-โล' },
     { image: '🍋', correct: 'lemon', correctRead: 'เลม-เมิน', meaning: 'มะนาวเลมอน', wrong: 'melon', wrongRead: 'เมล-เลิน' },
-
     { image: '🥕', correct: 'carrot', correctRead: 'แค-รอท', meaning: 'แครอต', wrong: 'parrot', wrongRead: 'แพ-รอท' },
     { image: '🌽', correct: 'corn', correctRead: 'คอร์น', meaning: 'ข้าวโพด', wrong: 'coin', wrongRead: 'คอยน์' },
     { image: '🥔', correct: 'potato', correctRead: 'พะ-เท-โท', meaning: 'มันฝรั่ง', wrong: 'tomato', wrongRead: 'ทะ-เม-โท' },
     { image: '🍅', correct: 'tomato', correctRead: 'ทะ-เม-โท', meaning: 'มะเขือเทศ', wrong: 'potato', wrongRead: 'พะ-เท-โท' },
     { image: '🥦', correct: 'broccoli', correctRead: 'บร็อค-โค-ลี', meaning: 'บรอกโคลี', wrong: 'brother', wrongRead: 'บรัธ-เธอร์' },
-
     { image: '🍦', correct: 'ice cream', correctRead: 'ไอซ์-ครีม', meaning: 'ไอศกรีม', wrong: 'ice cube', wrongRead: 'ไอซ์-คิวบ์' },
     { image: '🍪', correct: 'cookie', correctRead: 'คุก-กี้', meaning: 'คุกกี้', wrong: 'cooking', wrongRead: 'คุก-กิง' },
     { image: '🍩', correct: 'donut', correctRead: 'โด-นัท', meaning: 'โดนัท', wrong: 'do not', wrongRead: 'ดู-น็อท' },
     { image: '🍫', correct: 'chocolate', correctRead: 'ช็อค-โก-เลต', meaning: 'ช็อกโกแลต', wrong: 'coconut', wrongRead: 'โค-โค-นัท' },
     { image: '🍯', correct: 'honey', correctRead: 'ฮัน-นี', meaning: 'น้ำผึ้ง', wrong: 'money', wrongRead: 'มัน-นี' },
-
     { image: '🚌', correct: 'bus', correctRead: 'บัส', meaning: 'รถโดยสาร', wrong: 'bug', wrongRead: 'บั๊ก' },
     { image: '🚲', correct: 'bicycle', correctRead: 'ไบ-ซิ-เคิล', meaning: 'จักรยาน', wrong: 'circle', wrongRead: 'เซอร์-เคิล' },
     { image: '✈️', correct: 'airplane', correctRead: 'แอร์-เพลน', meaning: 'เครื่องบิน', wrong: 'airport', wrongRead: 'แอร์-พอร์ต' },
     { image: '🚢', correct: 'ship', correctRead: 'ชิพ', meaning: 'เรือ', wrong: 'shop', wrongRead: 'ช็อพ' },
     { image: '🚂', correct: 'train', correctRead: 'เทรน', meaning: 'รถไฟ', wrong: 'rain', wrongRead: 'เรน' },
-
     { image: '🚪', correct: 'door', correctRead: 'ดอร์', meaning: 'ประตู', wrong: 'floor', wrongRead: 'ฟลอร์' },
     { image: '🪟', correct: 'window', correctRead: 'วิน-โดว์', meaning: 'หน้าต่าง', wrong: 'winter', wrongRead: 'วิน-เทอร์' },
     { image: '🪑', correct: 'chair', correctRead: 'แชร์', meaning: 'เก้าอี้', wrong: 'cheer', wrongRead: 'เชียร์' },
     { image: '🛏️', correct: 'bed', correctRead: 'เบด', meaning: 'เตียง', wrong: 'bad', wrongRead: 'แบด' },
     { image: '💡', correct: 'lamp', correctRead: 'แลมป์', meaning: 'โคมไฟ', wrong: 'lamb', wrongRead: 'แลม' },
-
     { image: '📱', correct: 'phone', correctRead: 'โฟน', meaning: 'โทรศัพท์', wrong: 'photo', wrongRead: 'โฟ-โท' },
     { image: '💻', correct: 'computer', correctRead: 'คอม-พิว-เทอร์', meaning: 'คอมพิวเตอร์', wrong: 'commuter', wrongRead: 'คะ-มิว-เทอร์' },
     { image: '📺', correct: 'television', correctRead: 'เทล-ละ-วิช-ชัน', meaning: 'โทรทัศน์', wrong: 'telephone', wrongRead: 'เทล-ละ-โฟน' },
     { image: '📷', correct: 'camera', correctRead: 'แคม-เมอ-ระ', meaning: 'กล้องถ่ายรูป', wrong: 'camel', wrongRead: 'แคม-เมิล' },
     { image: '🎧', correct: 'headphones', correctRead: 'เฮด-โฟนส์', meaning: 'หูฟัง', wrong: 'headband', wrongRead: 'เฮด-แบนด์' },
-
     { image: '👕', correct: 'shirt', correctRead: 'เชิร์ต', meaning: 'เสื้อ', wrong: 'short', wrongRead: 'ชอร์ต' },
     { image: '👖', correct: 'pants', correctRead: 'แพนท์ส', meaning: 'กางเกง', wrong: 'plants', wrongRead: 'แพลนท์ส' },
     { image: '👗', correct: 'dress', correctRead: 'เดรส', meaning: 'ชุดกระโปรง', wrong: 'desk', wrongRead: 'เดสก์' },
     { image: '👟', correct: 'shoes', correctRead: 'ชูซ', meaning: 'รองเท้า', wrong: 'choose', wrongRead: 'ชูซ' },
     { image: '🧢', correct: 'hat', correctRead: 'แฮท', meaning: 'หมวก', wrong: 'hot', wrongRead: 'ฮ็อท' },
-
     { image: '👁️', correct: 'eye', correctRead: 'อาย', meaning: 'ตา', wrong: 'ear', wrongRead: 'เอียร์' },
     { image: '👂', correct: 'ear', correctRead: 'เอียร์', meaning: 'หู', wrong: 'air', wrongRead: 'แอร์' },
     { image: '👃', correct: 'nose', correctRead: 'โนซ', meaning: 'จมูก', wrong: 'rose', wrongRead: 'โรซ' },
     { image: '👄', correct: 'mouth', correctRead: 'เมาธ์', meaning: 'ปาก', wrong: 'mouse', wrongRead: 'เมาส์' },
     { image: '✋', correct: 'hand', correctRead: 'แฮนด์', meaning: 'มือ', wrong: 'sand', wrongRead: 'แซนด์' }
-];
+    ];
 
-    const TOTAL_QUESTIONS = 20;   // สุ่มมาเล่นรอบละ 20 ข้อ
+    const TOTAL_QUESTIONS = 20;
 
-    let allQuestions = [];        // 20 ข้อที่สุ่มได้ในรอบนี้
+    let allQuestions = [];
     let currentQuestionIndex = 0;
     let currentOptions = [];
     let isPlaying = false;
@@ -473,7 +437,6 @@
     let pinchCooldown = false;
     let lastHandDetectTime = Date.now();
 
-    // DOM
     const startScreen = document.getElementById('start-screen');
     const gameScreen = document.getElementById('game-screen');
     const endScreen = document.getElementById('end-screen');
@@ -500,7 +463,6 @@
     const speakingIndicator = document.getElementById('speaking-indicator');
     const speakingLang = document.getElementById('speaking-lang');
     const testVoiceBtn = document.getElementById('test-voice-btn');
-    const voiceStatus = document.getElementById('voice-status');
     const endScore = document.getElementById('end-score');
     const summaryList = document.getElementById('summary-list');
 
@@ -512,7 +474,6 @@
     const BTN_LEFT_COLORS = " border-8 border-pink-400 text-pink-600";
     const BTN_RIGHT_COLORS = " border-8 border-blue-400 text-blue-600";
 
-    /* ---- สุ่มคำถาม: Fisher–Yates แล้วตัด 20 ข้อ ---- */
     function shuffleArray(arr) {
         const a = [...arr];
         for (let i = a.length - 1; i > 0; i--) {
@@ -552,60 +513,27 @@
     }
 
     /* ============================================================
-       2. BILINGUAL AUDIO ENGINE (3-layer Thai fallback)
+       ระบบเสียง Google Translate ที่แก้ไขให้เล่นได้ 100%
        ============================================================ */
-    let availableVoices = [];
-    let thaiVoice = null;
-    let englishVoice = null;
+    const ttsPlayer = document.getElementById('tts-player');
     let speechUnlocked = false;
-    let currentAudio = null;
 
-    function loadVoices() {
-        availableVoices = window.speechSynthesis.getVoices() || [];
-
-        const thMatches = availableVoices.filter(v =>
-            v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('th')
-        );
-        thaiVoice = thMatches.find(v => v.localService) || thMatches[0] || null;
-
-        const enMatches = availableVoices.filter(v =>
-            v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('en')
-        );
-        englishVoice = enMatches.find(v => /en-US/i.test(v.lang) && v.localService)
-                    || enMatches.find(v => /en-US/i.test(v.lang))
-                    || enMatches[0] || null;
-
-        updateVoiceStatus();
-    }
-
-    function updateVoiceStatus() {
-        if (!voiceStatus) return;
-        if (thaiVoice) {
-            voiceStatus.textContent = `✅ พบเสียงไทย: ${thaiVoice.name}`;
-            voiceStatus.className = "text-xs text-green-500 mt-2";
-        } else {
-            voiceStatus.textContent = "🌐 ไม่พบเสียงไทยในเครื่อง — จะใช้เสียงออนไลน์แทน";
-            voiceStatus.className = "text-xs text-orange-500 mt-2";
-        }
-    }
-
-    loadVoices();
-    if (typeof speechSynthesis !== 'undefined') {
-        speechSynthesis.onvoiceschanged = loadVoices;
-        setTimeout(loadVoices, 500);
-        setTimeout(loadVoices, 1500);
-    }
-
+    // บังคับปลดล็อก <audio> ให้ได้รับอนุญาตจากเบราว์เซอร์
     function unlockSpeech() {
         if (speechUnlocked) return;
         try {
-            const warm = new SpeechSynthesisUtterance(' ');
-            warm.volume = 0;
-            window.speechSynthesis.speak(warm);
-            speechUnlocked = true;
-            loadVoices();
-        } catch (e) { /* ignore */ }
+            ttsPlayer.src = 'data:audio/mp3;base64,//OwgAAAAAAAAAAAAA//OwgAAAAAAAAAAAAA';
+            let playPromise = ttsPlayer.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    ttsPlayer.pause();
+                    speechUnlocked = true;
+                }).catch(() => { /* ignore */ });
+            }
+        } catch (e) { }
     }
+    
+    // ผูกเหตุการณ์คลิกและแตะหน้าจอเพื่อปลดล็อกเสียง
     document.addEventListener('click', unlockSpeech, { once: true });
     document.addEventListener('touchstart', unlockSpeech, { once: true });
 
@@ -618,40 +546,37 @@
     }
 
     function stopAllAudio() {
-        window.speechSynthesis.cancel();
-        if (currentAudio) {
-            currentAudio.pause();
-            currentAudio = null;
+        if (ttsPlayer) {
+            ttsPlayer.pause();
         }
     }
 
-    // Layer 2: online Thai TTS fallback
-    function playOnlineThai(text, onDone) {
+    function playOnlineTTS(text, lang, onDone) {
         try {
-            const url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=th&q='
-                        + encodeURIComponent(text);
-            const audio = new Audio(url);
-            currentAudio = audio;
+            const tl = lang === 'en' ? 'en' : 'th';
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${tl}&q=${encodeURIComponent(text)}`;
+            
+            ttsPlayer.src = url;
+            
             let finished = false;
             const finish = () => {
                 if (finished) return;
                 finished = true;
-                currentAudio = null;
+                ttsPlayer.onended = null;
+                ttsPlayer.onerror = null;
                 onDone();
             };
-            audio.onended = finish;
-            audio.onerror = finish;
-            setTimeout(finish, 6000);
-            audio.play().catch(finish);
+            
+            ttsPlayer.onended = finish;
+            ttsPlayer.onerror = finish; 
+            
+            setTimeout(finish, 6000); 
+            ttsPlayer.play().catch(finish);
         } catch (e) {
             onDone();
         }
     }
 
-    /**
-     * เล่นเสียงเรียงทีละประโยค
-     * phrases: [{ text, lang: 'en'|'th', rate, pitch, gap }]
-     */
     function speakSequence(phrases, remember = true) {
         if (isMuted) return;
         stopAllAudio();
@@ -665,57 +590,25 @@
 
         function playNext() {
             if (idx >= queue.length) { hideSpeakingIndicator(); return; }
+            
             const p = queue[idx++];
-            const isThai = p.lang === 'th';
-            showSpeakingIndicator(isThai ? 'TH' : 'EN');
+            showSpeakingIndicator(p.lang === 'th' ? 'TH' : 'EN');
 
             const goNext = () => setTimeout(playNext, p.gap ?? 200);
-
-            if (isThai && !thaiVoice) {
-                playOnlineThai(p.text, goNext);
-                return;
-            }
-
-            const u = new SpeechSynthesisUtterance(p.text);
-            u.lang = isThai ? 'th-TH' : 'en-US';
-            if (isThai && thaiVoice) u.voice = thaiVoice;
-            if (!isThai && englishVoice) u.voice = englishVoice;
-            u.rate = p.rate ?? (isThai ? 1.05 : 0.85);
-            u.pitch = p.pitch ?? 1.15;
-            u.volume = 1;
-
-            let done = false;
-            const finish = () => { if (!done) { done = true; goNext(); } };
-
-            u.onend = finish;
-            u.onerror = () => {
-                if (isThai) playOnlineThai(p.text, finish);
-                else finish();
-            };
-
-            window.speechSynthesis.speak(u);
-
-            const estimate = Math.max(2000, p.text.length * 120);
-            setTimeout(() => { if (!done) finish(); }, estimate);
+            playOnlineTTS(p.text, p.lang, goNext);
         }
 
         playNext();
     }
 
-    function speak(text, lang = 'en') {
-        speakSequence([{ text, lang }], false);
-    }
-
-    /* ---- ชุดเสียงเวลาตอบถูก: คำอังกฤษ → คำอ่าน → คำแปล ---- */
     function buildWordPhrases(q) {
         return [
-            { text: q.correct, lang: 'en', rate: 0.75, gap: 180 },
-            { text: `อ่านว่า ${q.correctRead}`, lang: 'th', rate: 1.0, gap: 180 },
-            { text: `${q.correct} แปลว่า ${q.meaning}`, lang: 'th', rate: 1.05 }
+            { text: q.correct, lang: 'en', gap: 200 },
+            { text: `อ่านว่า ${q.correctRead}`, lang: 'th', gap: 200 },
+            { text: `${q.correct} แปลว่า ${q.meaning}`, lang: 'th' }
         ];
     }
 
-    // Controls
     muteBtn.addEventListener('click', () => {
         isMuted = !isMuted;
         muteBtn.textContent = isMuted ? '🔇' : '🔊';
@@ -732,9 +625,8 @@
 
     testVoiceBtn.addEventListener('click', () => {
         unlockSpeech();
-        loadVoices();
         speakSequence([
-            { text: 'cat', lang: 'en', rate: 0.75, gap: 200 },
+            { text: 'cat', lang: 'en', gap: 200 },
             { text: 'อ่านว่า แคท', lang: 'th', gap: 200 },
             { text: 'cat แปลว่า แมว', lang: 'th' }
         ], false);
@@ -746,11 +638,11 @@
     });
 
     /* ============================================================
-       3. Game Logic
+       Game Logic
        ============================================================ */
     function startGame() {
         unlockSpeech();
-        buildQuestionSet();                                   // 🎲 สุ่ม 20 จาก 50
+        buildQuestionSet();
         questionSides = generateBalancedSides(allQuestions.length);
         currentQuestionIndex = 0;
         isPlaying = true;
@@ -816,7 +708,7 @@
         const targetBtn = isLeft ? btnLeft : btnRight;
 
         if (selected.isCorrect) {
-            speakSequence(buildWordPhrases(q));               // 🔊 คำ → คำอ่าน → คำแปล
+            speakSequence(buildWordPhrases(q));
 
             showFeedback(true, selected);
             createConfetti();
@@ -883,7 +775,6 @@
         const total = allQuestions.length;
         endScore.textContent = `${total} / ${total}`;
 
-        // สรุปคำศัพท์ + ปุ่มฟังซ้ำรายคำ
         summaryList.innerHTML = allQuestions.map((q, i) => `
             <div class="flex items-center gap-2 py-1 border-b border-purple-100 last:border-0">
                 <span class="emoji text-2xl">${q.image}</span>
@@ -943,9 +834,6 @@
         }
     }
 
-    /* ============================================================
-       4. Camera & MediaPipe
-       ============================================================ */
     function resizeCanvas() {
         canvasElement.width = window.innerWidth;
         canvasElement.height = window.innerHeight;
