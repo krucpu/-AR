@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="referrer" content="no-referrer">
+    <title>Math Genius: บวกเลข 3 หลักแนวตั้ง (Responsive & RTL)</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Kanit:wght@400;600;800&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Fredoka', 'Kanit', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #e0f2fe;
+            touch-action: none;
+            user-select: none;
+            height: 100vh;
+            height: 100dvh;
+        }
+        
+        .math-font {
+            font-family: 'Space Mono', 'Courier New', monospace;
+        }
+
+        #video-container {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            height: 100dvh;
+            z-index: 1;
+        }
+
+        #output_canvas {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        .hidden-video { display: none; }
+
+        #ui-layer {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            height: 100dvh;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .pointer-events-auto { pointer-events: auto; }
+        .thai-read { font-family: 'Kanit', sans-serif; }
+
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(5deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+
+        @keyframes bounce-in {
+            0% { transform: scale(0.7); opacity: 0; }
+            60% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-bounce-in {
+            animation: bounce-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); }
+            70% { box-shadow: 0 0 0 12px rgba(56, 189, 248, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+        }
+
+        .numpad-btn {
+            transition: all 0.15s ease;
+            transform-origin: center;
+        }
+        .numpad-btn.hovered {
+            transform: scale(1.1);
+            border-color: #38bdf8;
+            animation: pulse-glow 1s infinite;
+            z-index: 20;
+            background-color: #f0f9ff;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            50% { transform: translateX(8px); }
+            75% { transform: translateX(-8px); }
+        }
+        .wrong-shake {
+            animation: shake 0.4s;
+            color: #ef4444 !important;
+        }
+
+        .confetti {
+            position: absolute;
+            width: 12px; height: 12px;
+            z-index: 50;
+            opacity: 0;
+        }
+
+        #progress-fill { transition: width 0.3s ease; }
+
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(6px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+        }
+        .screen.active { opacity: 1; visibility: visible; }
+        #game-screen { background: transparent; backdrop-filter: none; }
+
+        #summary-list {
+            max-height: 35vh;
+            overflow-y: auto;
+            pointer-events: auto;
+        }
+        #summary-list::-webkit-scrollbar { width: 6px; }
+        #summary-list::-webkit-scrollbar-thumb { background: #bae6fd; border-radius: 6px; }
+    </style>
+</head>
+<body>
+
+    <audio id="tts-player" playsinline></audio>
+
+    <!-- Camera Layer -->
+    <div id="video-container">
+        <video id="input_video" class="hidden-video" autoplay playsinline></video>
+        <canvas id="output_canvas"></canvas>
+    </div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer">
+        <!-- Floating Decorative Icons -->
+        <div class="absolute top-2 left-2 text-2xl sm:text-4xl animate-float pointer-events-none opacity-60 sm:opacity-100">🧮</div>
+        <div class="absolute bottom-4 left-3 text-3xl sm:text-5xl animate-float pointer-events-none opacity-60 sm:opacity-100" style="animation-delay: 1.5s;">🔢</div>
+        <div class="absolute top-1/2 right-2 text-2xl sm:text-4xl animate-float pointer-events-none opacity-60 sm:opacity-100" style="animation-delay: 0.8s;">🏆</div>
+
+        <!-- Audio Control -->
+        <div class="absolute top-3 right-3 z-50">
+            <button id="mute-btn" class="bg-white/90 p-2 sm:p-3 rounded-full shadow-lg text-xl sm:text-2xl pointer-events-auto hover:bg-gray-100 transition-colors border-2 border-sky-200">🔊</button>
+        </div>
+
+        <!-- No Hand Warning -->
+        <div id="no-hand-warning" class="thai-read absolute top-16 sm:top-20 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-white font-bold text-sm sm:text-base px-4 py-1.5 rounded-full shadow-md opacity-0 transition-opacity duration-300 z-50 whitespace-nowrap">
+            👋 ยกมือขึ้นมาในกล้องนะ
+        </div>
+
+        <!-- START SCREEN -->
+        <div id="start-screen" class="screen active z-40 pointer-events-auto p-4">
+            <div class="bg-white/95 p-6 sm:p-8 rounded-3xl shadow-2xl text-center max-w-sm sm:max-w-md w-full border-4 border-sky-300">
+                <h1 class="text-3xl sm:text-4xl font-extrabold text-sky-600 mb-2 drop-shadow-sm">🧮 Math Genius!</h1>
+                <p class="thai-read text-sm sm:text-lg text-gray-700 mb-6 font-semibold leading-relaxed">
+                    ชูมือแล้ว <span class="text-pink-500 font-bold">จีบนิ้ว</span> 🤏 เพื่อกดแป้นพิมพ์<br>
+                    <span class="text-xs sm:text-sm text-sky-600 bg-sky-50 px-2 py-1 rounded-md mt-1 inline-block">💡 กรอกเลขจาก หลักหน่วย $\rightarrow$ หลักสิบ $\rightarrow$ หลักร้อย</span>
+                </p>
+
+                <div class="flex flex-col gap-3 w-full">
+                    <button id="start-easy-btn" class="bg-gradient-to-r from-green-400 to-emerald-500 text-white font-bold text-lg sm:text-xl py-3 px-6 rounded-2xl shadow-[0_4px_0_#047857] active:translate-y-1 active:shadow-none transition-all w-full">
+                        เริ่มเกม (แบบง่าย) 🌟
+                    </button>
+                    <button id="start-hard-btn" class="bg-gradient-to-r from-orange-400 to-red-500 text-white font-bold text-lg sm:text-xl py-3 px-6 rounded-2xl shadow-[0_4px_0_#b91c1c] active:translate-y-1 active:shadow-none transition-all w-full">
+                        เริ่มเกม (แบบยาก/มีทด) 🔥
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- GAME SCREEN -->
+        <div id="game-screen" class="screen z-30 flex flex-col justify-between py-2 sm:py-4 px-2 max-h-screen">
+            
+            <!-- Header Progress -->
+            <div class="w-full max-w-xs sm:max-w-md bg-white/90 rounded-2xl p-2.5 sm:p-3 shadow-md border-2 border-sky-200 mx-auto">
+                <div class="flex justify-between items-center w-full px-2 mb-1 sm:mb-2">
+                    <span class="text-sm sm:text-lg font-bold text-sky-600" id="game-mode-display">🧮 Math Genius</span>
+                    <span id="progress-text" class="text-sm sm:text-lg font-extrabold text-orange-500">⭐ 1 / 10</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5 sm:h-3 overflow-hidden">
+                    <div id="progress-fill" class="bg-gradient-to-r from-yellow-400 to-orange-500 h-full rounded-full w-0"></div>
+                </div>
+            </div>
+
+            <!-- Math Vertical Question -->
+            <div class="flex-1 flex flex-col items-center justify-center my-1 sm:my-2 pointer-events-none w-full">
+                <div id="question-container" class="math-font text-4xl sm:text-6xl md:text-7xl font-bold text-gray-800 drop-shadow-md animate-bounce-in bg-white/95 rounded-2xl sm:rounded-3xl px-6 sm:px-10 py-3 sm:py-5 border-4 border-sky-200 shadow-lg flex flex-col items-end leading-none w-full max-w-[280px] sm:max-w-[360px]">
+                    <div id="val-a" class="mb-1 sm:mb-2 tracking-widest">123</div>
+                    <div class="flex items-end border-b-4 sm:border-b-8 border-gray-800 pb-1 sm:pb-2 w-full justify-between">
+                        <div class="text-pink-500 mr-2 text-3xl sm:text-5xl">+</div>
+                        <div id="val-b" class="tracking-widest">456</div>
+                    </div>
+                    <!-- Answer Field -->
+                    <div id="answer-display" class="mt-1 sm:mt-2 text-sky-600 h-10 sm:h-14 flex items-center justify-end w-full tracking-widest font-black">
+                        ?
+                    </div>
+                </div>
+            </div>
+
+            <!-- Responsive Numpad Keyboard -->
+            <div id="numpad" class="grid grid-cols-3 gap-1.5 sm:gap-3 w-full max-w-[290px] sm:max-w-[360px] mx-auto pointer-events-auto pb-1">
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="1">1</button>
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="2">2</button>
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="3">3</button>
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="4">4</button>
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="5">5</button>
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="6">6</button>
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="7">7</button>
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="8">8</button>
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="9">9</button>
+                <button class="numpad-btn bg-red-100 border-2 sm:border-4 border-red-200 text-red-600 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-base sm:text-xl font-bold shadow-sm flex items-center justify-center thai-read" data-key="DEL">ลบ</button>
+                <button class="numpad-btn bg-white border-2 sm:border-4 border-gray-200 text-gray-700 rounded-xl sm:rounded-2xl h-11 sm:h-14 text-xl sm:text-3xl font-bold shadow-sm flex items-center justify-center" data-key="0">0</button>
+                <button class="numpad-btn bg-emerald-500 border-2 sm:border-4 border-emerald-600 text-white rounded-xl sm:rounded-2xl h-11 sm:h-14 text-base sm:text-xl font-bold shadow-sm flex items-center justify-center thai-read" data-key="ENTER">ตอบ</button>
+            </div>
+        </div>
+
+        <!-- FEEDBACK OVERLAY -->
+        <div id="feedback-overlay" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 opacity-0 transition-opacity duration-300 pointer-events-none w-full max-w-xs px-4">
+            <div id="feedback-box" class="bg-white px-6 py-4 sm:px-8 sm:py-6 rounded-3xl shadow-2xl border-4 transform scale-50 transition-transform duration-300 text-center">
+                <div id="feedback-emoji" class="text-4xl sm:text-5xl mb-1">🎉</div>
+                <h2 id="feedback-text" class="text-4xl sm:text-5xl font-extrabold math-font">579</h2>
+                <p id="feedback-read" class="thai-read text-lg sm:text-xl font-bold text-gray-600 mt-1"></p>
+            </div>
+        </div>
+
+        <!-- END SCREEN -->
+        <div id="end-screen" class="screen z-40 pointer-events-auto p-4">
+            <div class="bg-white/95 p-6 sm:p-8 rounded-3xl shadow-2xl text-center max-w-sm sm:max-w-md w-full border-4 sm:border-8 border-yellow-400 relative">
+                <div class="text-5xl sm:text-6xl mb-2">🏆</div>
+                <h1 class="text-3xl sm:text-4xl font-extrabold text-yellow-500 mb-1">อัจฉริยะ!</h1>
+                <p class="text-base sm:text-lg text-gray-700 mb-2 font-bold">ทำโจทย์ครบทุกข้อแล้ว!</p>
+                <div id="end-score" class="text-xl sm:text-2xl font-black text-green-500 mb-3 bg-green-100 rounded-full py-1 px-5 inline-block">10 / 10</div>
+
+                <p class="thai-read text-sm font-bold text-gray-700 mb-2">📚 สรุปผลการทำโจทย์</p>
+                <div id="summary-list" class="thai-read text-left bg-sky-50 rounded-2xl p-3 border-2 border-sky-200 mb-4"></div>
+
+                <button id="restart-btn" class="bg-gradient-to-r from-sky-400 to-blue-500 text-white font-bold text-lg sm:text-xl py-3 px-6 rounded-2xl shadow-[0_4px_0_#0284c7] active:translate-y-1 active:shadow-none transition-all w-full flex items-center justify-center gap-2">
+                    <span>🏠</span> กลับไปหน้าแรก
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+<script>
+    function generateMathQuestions() {
+        const questions = [];
+        // Easy Mode (ไม่มีทด)
+        for(let i=0; i<30; i++) {
+            let a = Math.floor(Math.random() * 400) + 100;
+            let b = Math.floor(Math.random() * 400) + 100;
+            let sum = a + b;
+            questions.push({ valA: a, valB: b, correct: sum.toString(), isEasy: true, eq: `${a} บวก ${b} เท่ากับ ${sum}` });
+        }
+        // Hard Mode (มีทด)
+        for(let i=0; i<30; i++) {
+            let a = Math.floor(Math.random() * 800) + 100;
+            let b = Math.floor(Math.random() * 800) + 100;
+            let sum = a + b;
+            questions.push({ valA: a, valB: b, correct: sum.toString(), isEasy: false, eq: `${a} บวก ${b} เท่ากับ ${sum}` });
+        }
+        return questions;
+    }
+
+    let wordBank = [];
+    const TOTAL_QUESTIONS = 10;
+
+    let allQuestions = [];
+    let currentQuestionIndex = 0;
+    let currentInput = ""; // เก็บสตริงตัวเลข
+    let isPlaying = false;
+    let isMuted = false;
+    let isTransitioning = false;
+
+    // สถานะกล้อง & การจับมือ
+    let hoveredKey = null;
+    let wasPinching = false;
+    let pinchCooldown = false;
+    let lastHandDetectTime = Date.now();
+
+    // DOM Elements
+    const startScreen = document.getElementById('start-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const endScreen = document.getElementById('end-screen');
+    const valA = document.getElementById('val-a');
+    const valB = document.getElementById('val-b');
+    const answerDisplay = document.getElementById('answer-display');
+    const progressText = document.getElementById('progress-text');
+    const progressFill = document.getElementById('progress-fill');
+    const feedbackOverlay = document.getElementById('feedback-overlay');
+    const feedbackBox = document.getElementById('feedback-box');
+    const feedbackEmoji = document.getElementById('feedback-emoji');
+    const feedbackText = document.getElementById('feedback-text');
+    const feedbackRead = document.getElementById('feedback-read');
+    const numpadButtons = document.querySelectorAll('.numpad-btn');
+    const noHandWarning = document.getElementById('no-hand-warning');
+
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    function shuffleArray(arr) {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
+    function buildQuestionSet(mode) {
+        wordBank = generateMathQuestions();
+        let pool = mode === 'easy' ? wordBank.filter(w => w.isEasy) : wordBank.filter(w => !w.isEasy);
+        allQuestions = shuffleArray(pool).slice(0, TOTAL_QUESTIONS);
+    }
+
+    // Audio TTS System
+    const ttsPlayer = document.getElementById('tts-player');
+    let speechUnlocked = false;
+
+    function unlockSpeech() {
+        if (speechUnlocked) return;
+        try {
+            ttsPlayer.src = 'data:audio/mp3;base64,//OwgAAAAAAAAAAAAA//OwgAAAAAAAAAAAAA';
+            let playPromise = ttsPlayer.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => { ttsPlayer.pause(); speechUnlocked = true; }).catch(() => {});
+            }
+        } catch (e) { }
+    }
+    document.addEventListener('click', unlockSpeech, { once: true });
+    document.addEventListener('touchstart', unlockSpeech, { once: true });
+
+    function playOnlineTTS(text, onDone) {
+        try {
+            ttsPlayer.src = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=th&q=${encodeURIComponent(text)}`;
+            let finished = false;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                ttsPlayer.onended = null;
+                ttsPlayer.onerror = null;
+                if(onDone) onDone();
+            };
+            ttsPlayer.onended = finish;
+            ttsPlayer.onerror = finish; 
+            setTimeout(finish, 5000); 
+            ttsPlayer.play().catch(finish);
+        } catch (e) { if(onDone) onDone(); }
+    }
+
+    function speakText(text) {
+        if (isMuted) return;
+        if(ttsPlayer) ttsPlayer.pause();
+        playOnlineTTS(text);
+    }
+
+    document.getElementById('mute-btn').addEventListener('click', (e) => {
+        isMuted = !isMuted;
+        e.target.textContent = isMuted ? '🔇' : '🔊';
+        if (isMuted && ttsPlayer) ttsPlayer.pause();
+    });
+
+    // Game Core Logic
+    function startGame(mode) {
+        unlockSpeech();
+        buildQuestionSet(mode);
+        currentQuestionIndex = 0;
+        isPlaying = true;
+        isTransitioning = false;
+        
+        document.getElementById('game-mode-display').textContent = mode === 'easy' ? "🧮 Easy Mode" : "🔥 Hard Mode";
+
+        startScreen.classList.remove('active');
+        endScreen.classList.remove('active');
+        gameScreen.classList.add('active');
+
+        speakText('เริ่มเกมกันเลย');
+        loadQuestion(currentQuestionIndex);
+    }
+
+    function loadQuestion(index) {
+        if (index >= allQuestions.length) { endGame(); return; }
+
+        const q = allQuestions[index];
+        valA.textContent = q.valA;
+        valB.textContent = q.valB;
+        currentInput = "";
+        updateAnswerDisplay();
+
+        progressText.textContent = `⭐ ${index + 1} / ${allQuestions.length}`;
+        progressFill.style.width = `${(index / allQuestions.length) * 100}%`;
+
+        const container = document.getElementById('question-container');
+        container.classList.remove('animate-bounce-in');
+        void container.offsetWidth;
+        container.classList.add('animate-bounce-in');
+    }
+
+    function updateAnswerDisplay() {
+        if(currentInput === "") {
+            answerDisplay.innerHTML = '<span class="text-gray-300">?</span>';
+        } else {
+            answerDisplay.textContent = currentInput;
+        }
+    }
+
+    // Logic การกดปุ่ม (ปรับปรุงให้กรอกเลขขวาไปซ้าย)
+    function handleKeypress(key) {
+        if (!isPlaying || isTransitioning) return;
+
+        // Visual Click Feedback
+        const btn = document.querySelector(`.numpad-btn[data-key="${key}"]`);
+        if(btn) {
+            btn.style.transform = 'scale(0.92)';
+            setTimeout(() => btn.style.transform = '', 120);
+        }
+
+        if (key === 'DEL') {
+            // ลบหลักซ้ายสุด (ตัวล่าสุดที่เพิ่งกดเข้ามา)
+            currentInput = currentInput.slice(1);
+            updateAnswerDisplay();
+        } else if (key === 'ENTER') {
+            if(currentInput.length > 0) checkAnswer();
+        } else {
+            if (currentInput.length < 4) { 
+                // แทรกตัวเลขใหม่เข้าไปด้านหน้า (ขวาไปซ้าย: หลักหน่วย -> หลักสิบ -> หลักร้อย)
+                currentInput = key + currentInput;
+                updateAnswerDisplay();
+            }
+        }
+    }
+
+    function checkAnswer() {
+        if(isTransitioning) return;
+        const q = allQuestions[currentQuestionIndex];
+        isTransitioning = true;
+
+        if (currentInput === q.correct) {
+            speakText(q.eq);
+            showFeedback(true, q.correct);
+            createConfetti();
+            answerDisplay.classList.add('text-green-500');
+
+            setTimeout(() => {
+                answerDisplay.classList.remove('text-green-500');
+                currentQuestionIndex++;
+                hideFeedback();
+                isTransitioning = false;
+                loadQuestion(currentQuestionIndex);
+            }, 2500);
+        } else {
+            speakText('ลองคิดใหม่อีกทีนะ');
+            showFeedback(false, currentInput);
+            answerDisplay.classList.add('wrong-shake');
+
+            setTimeout(() => {
+                answerDisplay.classList.remove('wrong-shake');
+                currentInput = "";
+                updateAnswerDisplay();
+                hideFeedback();
+                isTransitioning = false;
+            }, 1800);
+        }
+    }
+
+    function showFeedback(isCorrect, text) {
+        feedbackOverlay.classList.remove('opacity-0');
+        feedbackBox.classList.remove('scale-50');
+        feedbackBox.classList.add('scale-100');
+
+        if (isCorrect) {
+            feedbackBox.className = "bg-green-50 border-green-400 text-green-600 px-6 py-4 rounded-3xl shadow-2xl border-4 transform scale-100 transition-transform duration-300 text-center";
+            feedbackEmoji.textContent = "🎉";
+            feedbackText.textContent = text;
+            feedbackRead.textContent = `ถูกต้อง!`;
+        } else {
+            feedbackBox.className = "bg-orange-50 border-orange-400 text-orange-600 px-6 py-4 rounded-3xl shadow-2xl border-4 transform scale-100 transition-transform duration-300 text-center";
+            feedbackEmoji.textContent = "🤔";
+            feedbackText.textContent = text;
+            feedbackRead.textContent = "ลองใหม่อีกครั้ง";
+        }
+    }
+
+    function hideFeedback() {
+        feedbackOverlay.classList.add('opacity-0');
+        feedbackBox.classList.remove('scale-100');
+        feedbackBox.classList.add('scale-50');
+    }
+
+    function endGame() {
+        isPlaying = false;
+        gameScreen.classList.remove('active');
+        endScreen.classList.add('active');
+        progressFill.style.width = '100%';
+
+        document.getElementById('end-score').textContent = `${TOTAL_QUESTIONS} / ${TOTAL_QUESTIONS}`;
+        
+        const sumList = document.getElementById('summary-list');
+        sumList.innerHTML = allQuestions.map((q) => `
+            <div class="flex items-center justify-between py-1.5 border-b border-sky-200 last:border-0 text-base">
+                <span class="font-bold text-sky-700 math-font">${q.valA} + ${q.valB}</span>
+                <span class="text-pink-500 font-bold mx-2">=</span>
+                <span class="text-green-600 font-bold math-font">${q.correct}</span>
+            </div>
+        `).join('');
+
+        speakText(`เก่งมาก ทำครบทั้ง ${TOTAL_QUESTIONS} ข้อแล้ว`);
+        createConfetti(60);
+    }
+
+    // User Event Listeners
+    document.getElementById('start-easy-btn').addEventListener('click', () => startGame('easy'));
+    document.getElementById('start-hard-btn').addEventListener('click', () => startGame('hard'));
+    document.getElementById('restart-btn').addEventListener('click', () => {
+        endScreen.classList.remove('active');
+        startScreen.classList.add('active');
+    });
+
+    // Touch & Pointer interaction
+    numpadButtons.forEach(btn => {
+        btn.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            handleKeypress(btn.dataset.key);
+        });
+    });
+
+    function createConfetti(amount = 25) {
+        const colors = ['#facc15', '#f472b6', '#38bdf8', '#34d399', '#a78bfa'];
+        for (let i = 0; i < amount; i++) {
+            const conf = document.createElement('div');
+            conf.classList.add('confetti');
+            conf.style.left = Math.random() * 100 + 'vw';
+            conf.style.top = '-10px';
+            conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            conf.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+
+            const duration = Math.random() * 2 + 1.5;
+            const delay = Math.random() * 0.3;
+            const tx = (Math.random() - 0.5) * 160;
+
+            conf.animate([
+                { transform: `translate3d(0,0,0) rotate(0deg)`, opacity: 1 },
+                { transform: `translate3d(${tx}px, 100vh, 0) rotate(${Math.random() * 360}deg)`, opacity: 0 }
+            ], { duration: duration * 1000, delay: delay * 1000, fill: 'forwards' });
+            document.body.appendChild(conf);
+            setTimeout(() => conf.remove(), (duration + delay) * 1000);
+        }
+    }
+
+    // MediaPipe Hand Detection Engine
+    function resizeCanvas() {
+        canvasElement.width = window.innerWidth;
+        canvasElement.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function onResults(results) {
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+        let handDetected = false;
+
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            handDetected = true;
+            lastHandDetectTime = Date.now();
+
+            for (const landmarks of results.multiHandLandmarks) {
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 3});
+                drawLandmarks(canvasCtx, landmarks, {color: '#38bdf8', lineWidth: 1.5, radius: 3});
+
+                if (isPlaying && !isTransitioning) {
+                    const indexFinger = landmarks[8];
+                    const thumb = landmarks[4];
+                    const screenX = (1 - indexFinger.x) * window.innerWidth;
+                    const screenY = indexFinger.y * window.innerHeight;
+
+                    checkHover(screenX, screenY);
+
+                    const dist = Math.hypot(thumb.x - indexFinger.x, thumb.y - indexFinger.y);
+                    const isPinching = dist < 0.055;
+
+                    if (isPinching && !wasPinching && hoveredKey && !pinchCooldown) {
+                        handleKeypress(hoveredKey);
+                        pinchCooldown = true;
+                        setTimeout(() => { pinchCooldown = false; }, 500); 
+                    }
+                    wasPinching = isPinching;
+                }
+            }
+        } else {
+            if (Date.now() - lastHandDetectTime > 2500 && isPlaying) {
+                noHandWarning.classList.remove('opacity-0');
+            }
+            clearHovers();
+            wasPinching = false;
+        }
+
+        if (handDetected) noHandWarning.classList.add('opacity-0');
+        canvasCtx.restore();
+    }
+
+    function checkHover(x, y) {
+        let newHover = null;
+        
+        numpadButtons.forEach(btn => {
+            const rect = btn.getBoundingClientRect();
+            if (x > rect.left - 6 && x < rect.right + 6 &&
+                y > rect.top - 6 && y < rect.bottom + 6) {
+                newHover = btn.dataset.key;
+            }
+        });
+
+        if (hoveredKey !== newHover) {
+            clearHovers();
+            hoveredKey = newHover;
+            if (hoveredKey) {
+                const btn = document.querySelector(`.numpad-btn[data-key="${hoveredKey}"]`);
+                if(btn) btn.classList.add('hovered');
+            }
+        }
+    }
+
+    function clearHovers() {
+        numpadButtons.forEach(btn => btn.classList.remove('hovered'));
+        hoveredKey = null;
+    }
+
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.65,
+        minTrackingConfidence: 0.65
+    });
+    hands.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => { await hands.send({image: videoElement}); },
+        width: 1280, height: 720, facingMode: "user"
+    });
+
+    camera.start().catch(() => {
+        alert("ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตให้ใช้งานกล้องบนอุปกรณ์ของคุณ");
+    });
+</script>
+</body>
+</html>
